@@ -1,4 +1,7 @@
-# ###  Setup (Required – Do First)
+# 
+# ## 🧪 Homework – Embedded Pub/Sub Client
+# 
+# ### ✅ Setup (Required – Do First)
 # 
 # 1. Update the WiFi configuration
 # 
@@ -14,7 +17,7 @@
 # 
 # ---
 # 
-# ###  Core Tasks (Required)
+# ### 🚀 Core Tasks (Required)
 # 
 # 4. Run the system and verify:
 # 
@@ -30,7 +33,7 @@
 # 
 # ---
 # 
-# ###  Extensions (Choose at least ONE)
+# ### 🔧 Extensions (Choose at least ONE)
 # 
 # 6. Improve the communication system
 # 
@@ -55,7 +58,7 @@
 # 
 # ---
 # 
-# ###  Reflection (Short Answer)
+# ### 🧠 Reflection (Short Answer)
 # 
 # 10. Answer briefly:
 # 
@@ -109,6 +112,7 @@ class Scheduler:
     def add(self, task):
         self.tasks.append(task)
         self.tasks.sort(key=lambda t: t.priority)
+        print('Scheduler.tasks',self.tasks)
 
     def run(self):
         while True:
@@ -135,6 +139,7 @@ class WiFiManager:
 
         self.wlan = network.WLAN(network.STA_IF)
         self.wlan.active(True)
+        self.connect()
 
     def connect(self):
         print("""Connecting to WiFi...
@@ -206,6 +211,7 @@ class SocketClient(Task):
         self.sock = None
         self.actions = {}
         self._rx_buffer = b""
+        self.connect()
 
     def connect(self):
         print("🔌 Conectando al broker...")
@@ -376,7 +382,7 @@ class Node:
 # 
 # time.sleep(2)
 # 
-#  EVERYTHING stops
+# 👉 EVERYTHING stops
 # 
 # So:
 # 
@@ -406,11 +412,12 @@ class CameraPublisherTask(Task):
     # Upgrade to the real ov7670 camera, it could read the data on the other `_thread`
     def __init__(self, scheduler, pubsub, width=40, height=30, period_ms=20000):
         super().__init__(scheduler, period_ms)
-
+        print('Camera1')
         self.pubsub = pubsub
         self.WIDTH = width
         self.HEIGHT = height
         self.buf = bytearray(width * height * 2)
+        print('Camera2')
 
 #        self.last = 0
 #        self.interval = 2
@@ -463,9 +470,13 @@ class CameraPublisherTask(Task):
 class Arm(Task):
     def __init__(self, scheduler, pubsub,joint_state, period_ms=30000):
         super().__init__(scheduler, period_ms)
+        print('Arm1')
         self.pubsub = pubsub
+        print('Arm2')
         self.joint_state = joint_state
+        print('Arm3')
         pubsub.subscribe("arm/joint_state",self.handle_message )
+        print('Amr4')
 
     def update(self):
 #             self.pubsub.publish(
@@ -521,18 +532,28 @@ class MainApp:
     def __init__(self):
 
         self.scheduler = Scheduler()
-        self.wifi = WiFiManager("Ejemplo") # Ejemplo  Change to your WiFi
-        self.socket = SocketClient(host="192.168.1.17", port=5051,scheduler=self.scheduler) #192.168.1.100  # Change to the Broker IP
-        self.pubsub = Node(self.socket, prefix='UDFJC/emb1/robot0/')
-        self.watchdog = WatchdogTask(scheduler=self.scheduler, pubsub=self.pubsub)
-        self.camera = CameraPublisherTask(scheduler=self.scheduler, pubsub=self.pubsub, width=40, height=30)
-        self.arm = Arm(scheduler=self.scheduler, pubsub=self.pubsub,joint_state={"shoulder": 10, "elbow": 20, "wrist": 30})
-        self.car = Car(scheduler=self.scheduler, pubsub=self.pubsub,twist = {"linear": 0.0,"angular": 0.0})
+        print('Scheduler')
+        self.wifi = WiFiManager("PEREZ") # Ejemplo  Change to your WiFi
+        #self.wifi.connect()
+        print('WiFiManager')
+        self.socket_client = SocketClient(host="192.168.1.17", port=5051,scheduler=self.scheduler) #192.168.1.100  # Change to the Broker IP
+        #self.socket_client.connect()
+        print('SocketClient')
+        self.pubsub = Node(self.socket_client, prefix='UDFJC/emb1/robot0/')
+        print('Node')
+
+        WatchdogTask(scheduler=self.scheduler, pubsub=self.pubsub)
+        print('WatchdogTask')
+        CameraPublisherTask(scheduler=self.scheduler, pubsub=self.pubsub, width=40, height=30)
+        print('CameraPublisherTask')
+        Arm(scheduler=self.scheduler, pubsub=self.pubsub,joint_state={"shoulder": 10, "elbow": 20, "wrist": 30})
+        print('Arm')
+        Car(scheduler=self.scheduler, pubsub=self.pubsub,twist = {"linear": 0.0,"angular": 0.0})
+        print('Car')
+       
  
 
     def run(self):
-        self.wifi.connect()
-        print("🚀 Scheduler running...")
         self.scheduler.run()
 
 
@@ -541,3 +562,5 @@ class MainApp:
 # =========================================================
 app = MainApp()
 app.run()
+
+
