@@ -56,7 +56,12 @@ class TCPServer:
                 self.pubsub.subscribe(client, pkt["topic"])
 
             elif pkt["action"] == "PUB":
-                await self.pubsub.publish(pkt["topic"], pkt["data"], origin=client)
+                ts=None
+                if "timestamp" in pkt:
+                    ts=pkt["timestamp"]
+                #print('PUB1',ts,pkt.keys())
+                await self.pubsub.publish(pkt["topic"], pkt["data"], ts , origin=client)
+                #await self.pubsub.publish(pkt["topic"], pkt["data"], origin=client)
 
         writer.close()
         await writer.wait_closed()
@@ -89,7 +94,11 @@ class WSServer:
                 self.pubsub.subscribe(client, pkt["topic"])
 
             elif pkt["action"] == "PUB":
-                await self.pubsub.publish(pkt["topic"], pkt["data"], origin=client)
+                ts=None
+                if "timestamp" in pkt:
+                    ts=pkt["timestamp"]
+                #print('PUB1',ts,pkt.keys())
+                await self.pubsub.publish(pkt["topic"], pkt["data"], ts , origin=client)
 
     async def start(self):
         return await websockets.serve(self.handler, self.host, self.port)
@@ -102,16 +111,17 @@ class PubSub:
         self.subscriptions.setdefault(topic, set()).add(client)
         print(f"[SUB] {client} -> {topic}",self.subscriptions.keys())
 
-    async def publish(self, topic, data, origin=None):
+    async def publish(self, topic, data, timestamp=None, origin=None):
         msg = json.dumps({
             "action": "PUB",
             "topic": topic,
-            "data": data
+            "data": data,
+            "timestamp" : timestamp
         })
 
         clients = self.subscriptions.get(topic, set())
 
-        print(f"[PUB] {topic} -> {len(clients)} clients")
+        print(f"[PUB] {topic} -> {len(clients)} clients, ts: {timestamp}")        
 
         for c in list(clients):
             if c != origin:
