@@ -89,6 +89,7 @@ import network, time, json, gc
 import usocket as socket
 import ubinascii
 from machine import Timer
+import math
 
 import time
 
@@ -216,11 +217,11 @@ class SocketClient(Task):
     def connect(self):
         print("🔌 Conectando al broker...")
         addr = socket.getaddrinfo(self.host, self.port)[0][-1]
-        print('addr',addr)
+        #prnt('addr',addr)
         self.sock = socket.socket()
-        print('sock',self.sock)
+        #prnt('sock',self.sock)
         self.sock.connect(addr)
-        print('sock.connect')
+        #prnt('sock.connect')
         #self.sock.settimeout(0.1)
         self.sock.setblocking(False)
         print("✅ Conectado")
@@ -315,33 +316,35 @@ class Node:
         self.subscriptions = {}  # topic -> set(callback)
 
     def publish(self, topic, data):
-        self.broker_publish(topic,data)
-        self.local_publish(topic,data)
+        ts=time.time()
+        self.broker_publish(topic,data,ts=ts)
+        self.local_publish(topic,data,ts=ts)
        
-    def broker_publish(self,topic,data):   
+    def broker_publish(self,topic,data,ts=None):
         self.sock.ensure()
 
         pkt = {
             "action": "PUB",
             "topic": self.prefix+topic,
-            "data": data
+            "data": data,
+            "timestamp":ts
         }
 
         self.sock.send_json(pkt)
 
 
-    def local_publish(self,topic,data):   
+    def local_publish(self,topic,data,ts=None):   
         callbacks = self.subscriptions.get(topic, set())
 
-        print(f"[PUB] {topic} -> {len(callbacks)} callbacks")
+        print(f"[PUB] {topic} -> {len(callbacks)} callbacks, ts: {ts}")
 
         for c in list(callbacks):
             #if c != origin:
                 try:
                     c(data)
-                except:
+                except Exception as e:
                     callbacks.remove(c)
-                    print("Remove from topic",topic,"callback",c)
+                    print("Remove from topic",topic,"callback",c,"error",e)
 
 
     def subscribe(self, topic,callback ):#topic without prefix
@@ -363,7 +366,7 @@ class Node:
 
         local_topic = topic[len(self.prefix):]
 
-        print('Node.handle_pub', local_topic)
+        #prnt('Node.handle_pub', local_topic)
 
         self.local_publish(local_topic, msg['data'])
 
@@ -405,22 +408,67 @@ class WatchdogTask(Task):
                 "debug/watchdog",
                 {"msg": "alive"}
             )
-            print("🐶 Watchdog")
+            #prnt("🐶 Watchdog")
             
 
-class CameraPublisherTask(Task):
+class CameraSimulator(Task):
     # Upgrade to the real ov7670 camera, it could read the data on the other `_thread`
     def __init__(self, scheduler, pubsub, width=40, height=30, period_ms=20000):
         super().__init__(scheduler, period_ms)
-        print('Camera1')
+        #print('Camera1')
         self.pubsub = pubsub
         self.WIDTH = width
         self.HEIGHT = height
         self.buf = bytearray(width * height * 2)
-        print('Camera2')
+        #print('Camera2')
+        self.car_angle=0
+        self.line_angle=60
+        pubsub.subscribe("car/state",self.handle_message_car )
+        pubsub.subscribe("stick/state",self.handle_message_line )
 
 #        self.last = 0
 #        self.interval = 2
+
+    def angle_to_pixel(self,car_angle, line_angle, width, fov=60):
+        # relative angle
+        delta = (line_angle - car_angle)*180/math.pi
+        # normalize to [-180, 180]
+        while delta > 180:
+            delta -= 360
+        while delta < -180:
+            delta += 360
+
+        # if outside camera view → not visible
+        #if abs(delta) > fov / 2:
+        #    return None  # line not in frame
+
+        # map to pixel
+        x = int((delta / fov + 0.5) * width)
+
+        # clamp (safety)
+        if x < 0:
+            x = 0
+        elif x >= width:
+            x = width - 1
+        #prnt('angle_to_pixel.delta',delta,x, fov , width)
+
+        return x
+
+
+    def pixel_to_angle(self, car_angle, x, width, fov=60):
+        # normalized column → [-0.5, 0.5]
+        norm = x / width - 0.5
+
+        # angle relative to camera center (degrees)
+        delta = norm * fov
+
+        # convert to radians
+        delta_rad = delta * math.pi / 180
+
+        # absolute angle in world
+        angle = car_angle + delta_rad
+
+        return angle
 
     def update(self):
         #now = time.time()
@@ -428,7 +476,7 @@ class CameraPublisherTask(Task):
         #if now - self.last > self.interval:
 #            gc.collect()
 
-            frame = self._generate_frame()
+            frame = self._generate_frame(control_line="angle")
 #            frame_b64 = ubinascii.b2a_base64(frame).decode().strip()
             frame_b64 = ubinascii.b2a_base64(frame).decode().replace("\n", "")
 
@@ -441,22 +489,49 @@ class CameraPublisherTask(Task):
                 }
             )
 
-            print("📤 Frame")
+            #prnt("📤 Frame")
             #self.last = now
 
-    def _generate_frame(self):
-        t = int(time.time()) % 60
+    def handle_message_car(self, msg):
+           #prnt("Camera.handle_message_car()",msg)
+           self.car_angle=msg["angle"]
 
-        r = (t * 10) % 256
-        g = (128 + t * 15) % 256
-        b = (255 - t * 35) % 256
+    def handle_message_line(self, msg):
+           self.line_angle=msg["angle"]
+           print("Camera.handle_message_line()",msg,self.line_angle)
 
-        color = self.rgb565(r, g, b)
 
-        hi = (color >> 8) & 0xFF
-        lo = color & 0xFF
+    def _generate_frame(self,control_line="time"):
+        if control_line=="angle":
+            t = self.angle_to_pixel(self.car_angle, self.line_angle, self.WIDTH, fov=60)
+            print('Camera._generate_frame.angle',t,self.car_angle, self.line_angle)
+        else:
+            t = int(time.time()*4) % self.WIDTH
+        #prnt('_generate_frame.t',t,control_line)
 
         for i in range(0, len(self.buf), 2):
+            if (i//2)%(self.WIDTH)==t:
+                gb=1
+            else:
+                gb=0
+
+            car_angle=self.car_angle
+            while car_angle > math.pi:
+                car_angle -= 2*math.pi
+            #prnt("angulo1",self.angle)
+            while car_angle < -math.pi:
+                car_angle += 2*math.pi
+            #background = ((i//2)%(self.WIDTH))*256//self.WIDTH#(i * 10) % 256
+            pixel_angle=self.pixel_to_angle( car_angle, (i//2)%(self.WIDTH), self.WIDTH, fov=60)
+            background = int(pixel_angle*255/(2*math.pi)+math.pi)
+            #print('background',background,car_angle)
+            r=(1-gb)*background
+            g = min(gb*127+int((pixel_angle*18/math.pi)%2*64),255)#(128 + i * 15) % 256
+            b = gb*255#(255 - i * 35) % 256
+
+            color = self.rgb565(r, g, b)
+            hi = (color >> 8) & 0xFF
+            lo = color & 0xFF
             self.buf[i] = hi
             self.buf[i + 1] = lo
 
@@ -467,46 +542,141 @@ class CameraPublisherTask(Task):
 
 #===========================================
 
-class Arm(Task):
-    def __init__(self, scheduler, pubsub,joint_state, period_ms=30000):
-        super().__init__(scheduler, period_ms)
-        print('Arm1')
-        self.pubsub = pubsub
-        print('Arm2')
-        self.joint_state = joint_state
-        print('Arm3')
-        pubsub.subscribe("arm/joint_state",self.handle_message )
-        print('Amr4')
+# class Arm(Task):
+#     def __init__(self, scheduler, pubsub,joint_state, period_ms=30000):
+#         super().__init__(scheduler, period_ms)
+#         print('Arm1')
+#         self.pubsub = pubsub
+#         print('Arm2')
+#         self.joint_state = joint_state
+#         print('Arm3')
+#         pubsub.subscribe("arm/joint_state",self.handle_message )
+#         print('Amr4')
+# 
+#     def update(self):
+# #             self.pubsub.publish(
+# #                 "arm/update",
+# #                 {"JointState": str(joint_state)}
+# #             )
+#             print("Arm.update()",self.joint_state)
+# 
+#     def handle_message(self, msg):
+#            print("Arm.handle_message()",msg)
+#            self.joint_state.update(msg)
 
-    def update(self):
-#             self.pubsub.publish(
-#                 "arm/update",
-#                 {"JointState": str(joint_state)}
-#             )
-            print("Arm.update()",self.joint_state)
-
-    def handle_message(self, msg):
-           print("Arm.handle_message()",msg)
-           self.joint_state.update(msg)
-
-class Car(Task):
-    def __init__(self, scheduler, pubsub, twist , period_ms=30000):
+class CarSimulator(Task):
+    def __init__(self, scheduler, pubsub, twist , period_ms=1000):
         super().__init__(scheduler, period_ms)
         self.pubsub = pubsub
         self.twist = twist
-        pubsub.subscribe("car/car_vel",self.handle_message )
+        pubsub.subscribe("car/twist",self.handle_message )
+        self.angle=45*math.pi/180
+        self.time=time.time()
+        
+        
+        
 
     def update(self):
-#             self.pubsub.publish(
-#                 "car/update",
+        actual_time=time.time()
+        #prnt('CarSimulator.twist["angular"]',self.twist["angular"],actual_time-self.time)
+        self.angle = (self.angle + self.twist["angular"]*(actual_time-self.time))
+        #prnt("angulo0",self.angle,math.pi)
+        while self.angle > math.pi:
+            self.angle -= 2*math.pi
+        #prnt("angulo1",self.angle)
+        while self.angle < -math.pi:
+            self.angle += 2*math.pi
+        #prnt("angulo2",self.angle)
+
+        self.time=actual_time
+        self.pubsub.publish(
+            "car/state",
+            {"angle": self.angle}
+        )
+        #prnt("angulo3",self.angle)
+ #             self.pubsub.publish(
+#                 "car/twist",
 #                 {"Twist": str(twist)}
 #             )
-            print("Car.update()",self.twist)
+#            print("Car.update()",self.twist)
 
     def handle_message(self, msg):
-           print("Car.handle_message()",msg)
+           #prnt("Car.handle_message()",msg)
            self.twist.update(msg)
            
+
+class FollowLineControl:
+    def __init__(self,  pubsub):
+        self.pubsub = pubsub
+        pubsub.subscribe("camera/frame",self.handle_message )
+        self.threshold=2000
+        self.angular_default=10*math.pi/180
+
+
+
+    def handle_message(self, msg):
+        #prnt("FollowLineControl.handle_message()",max,msg)
+           
+        w=msg['w']
+        h=msg['h']
+        cols=self.column_intensity_fast(msg["frame"], w, h)
+        max_cols=max(cols)
+        #prnt('FollowLineControl.max_cols',max_cols,self.threshold)
+        if max_cols>self.threshold:
+            index=cols.index(max_cols)
+            angular=self.angular_default*(index / w*2-1)
+            #prnt('FollowLineControl.angular True',angular,max_cols,index ,w)        
+        else:
+            angular=self.angular_default
+            #prnt('FollowLineControl.angular False',angular)
+        print('FollowLineControl',angular,index)        
+            
+        self.pubsub.publish(
+            "car/twist",
+            {"angular": angular}
+        )
+        
+            
+        
+            
+    def column_intensity_fast(self,b64_data, width, height):
+        import ubinascii
+
+        buf = ubinascii.a2b_base64(b64_data)
+        cols = [0] * width
+        #inc=1/height/3
+        x = 0
+        for i in range(0, len(buf), 2):
+            rgb565 = (buf[i] << 8) | buf[i+1]
+
+            cols[x] += ((rgb565 >> 11) & 0x1F) \
+                     + ((rgb565 >> 5) & 0x3F) \
+                     + (rgb565 & 0x1F)
+
+            x = (x+1)%width
+            
+        return cols
+
+
+#
+# class Car(Task):
+#     def __init__(self, scheduler, pubsub, twist , period_ms=30000):
+#         super().__init__(scheduler, period_ms)
+#         self.pubsub = pubsub
+#         self.twist = twist
+#         pubsub.subscribe("car/car_vel",self.handle_message )
+# 
+#     def update(self):
+# #             self.pubsub.publish(
+# #                 "car/update",
+# #                 {"Twist": str(twist)}
+# #             )
+#             print("Car.update()",self.twist)
+# 
+#     def handle_message(self, msg):
+#            print("Car.handle_message()",msg)
+#            self.twist.update(msg)
+#            
 
 #===============
 # class Vector3:
@@ -544,13 +714,13 @@ class MainApp:
 
         WatchdogTask(scheduler=self.scheduler, pubsub=self.pubsub)
         print('WatchdogTask')
-        CameraPublisherTask(scheduler=self.scheduler, pubsub=self.pubsub, width=40, height=30)
+        FollowLineControl(pubsub=self.pubsub)
+        CameraSimulator(scheduler=self.scheduler, pubsub=self.pubsub, width=40, height=30, period_ms=1000)
         print('CameraPublisherTask')
-        Arm(scheduler=self.scheduler, pubsub=self.pubsub,joint_state={"shoulder": 10, "elbow": 20, "wrist": 30})
-        print('Arm')
-        Car(scheduler=self.scheduler, pubsub=self.pubsub,twist = {"linear": 0.0,"angular": 0.0})
+        #Arm(scheduler=self.scheduler, pubsub=self.pubsub,joint_state={"shoulder": 10, "elbow": 20, "wrist": 30})
+        #print('Arm')
+        CarSimulator(scheduler=self.scheduler, pubsub=self.pubsub,twist = {"linear": 0.0,"angular": 0.01})
         print('Car')
-       
  
 
     def run(self):
