@@ -90,8 +90,57 @@ import usocket as socket
 import ubinascii
 from machine import Timer
 import math
-
+#import traceback
+import sys
 import time
+
+class RingBuffer:
+    def __init__(self, size=10, unit="us"):
+        self.size = size
+        self.data = [0] * size
+        self.index = 0
+        #self.last = 0
+        self.count = 0
+        self.full = False
+        self.unit=unit
+        
+
+    def append(self, value):
+        self.data[self.index] = value
+        self.count = self.count + 1
+        self.index = self.count % self.size
+
+        if self.index == 0:
+            self.full = True
+        
+        #if not self.full:
+        #    self.last += 1
+
+    def get(self):
+        if not self.full:
+            return self.data[:self.index]
+        return self.data[self.index:] + self.data[:self.index]
+
+    def get_disord(self):
+        if not self.full:
+            return self.data[:self.index]
+        return self.data
+
+    def __len__(self):
+        return self.size if self.full else self.index
+    
+    def stats(self):
+        data = self.get_disord()
+        if not data:
+            return None
+        return {
+            "min": min(data),
+            "max": max(data),
+            "avg": sum(data) / len(data),
+            "len": len(data),
+            "count": self.count,
+            "unit": self.unit
+        }
 
 class Task:
     def __init__(self, scheduler, period_ms, priority=1):
@@ -99,11 +148,22 @@ class Task:
         self.priority = priority
         self.next_run = time.ticks_ms()
         scheduler.add(self)
+        self.metrics=RingBuffer();
 
     def update(self):
         pass
 
+    def update_measured(self):
+        #if not self.enable_metrics:
+        #    self.update()
+        #    return
 
+        start = time.ticks_us()
+        self.update()
+        end = time.ticks_us()
+
+        if self.metrics:
+            self.metrics.append(time.ticks_diff(end, start))
 
 
 class Scheduler:
@@ -121,7 +181,7 @@ class Scheduler:
 
             for task in self.tasks:
                 if time.ticks_diff(now, task.next_run) >= 0:
-                    task.update()
+                    task.update_measured()
                     task.next_run = time.ticks_add(now, task.period)
 
             gc.collect()
@@ -345,6 +405,8 @@ class Node:
                 except Exception as e:
                     callbacks.remove(c)
                     print("Remove from topic",topic,"callback",c,"error",e)
+                    #traceback.print_exc()
+                    sys.print_exception(e)
 
 
     def subscribe(self, topic,callback ):#topic without prefix
@@ -406,7 +468,10 @@ class WatchdogTask(Task):
     def update(self):
             self.pubsub.publish(
                 "debug/watchdog",
-                {"msg": "alive"}
+                {
+                    "mem_free": gc.mem_free(),
+                    "mem_used": gc.mem_alloc()
+                }
             )
             #prnt("🐶 Watchdog")
             
@@ -629,7 +694,7 @@ class FollowLineControl:
         else:
             angular=self.angular_default
             #prnt('FollowLineControl.angular False',angular)
-        print('FollowLineControl',angular,index)        
+        #print('FollowLineControl',angular,index)        
             
         self.pubsub.publish(
             "car/twist",
@@ -703,10 +768,10 @@ class MainApp:
 
         self.scheduler = Scheduler()
         print('Scheduler')
-        self.wifi = WiFiManager("PEREZ") # Ejemplo  Change to your WiFi
+        self.wifi = WiFiManager("Red_UD_LAMIC") # Ejemplo  Change to your WiFi
         #self.wifi.connect()
         print('WiFiManager')
-        self.socket_client = SocketClient(host="192.168.1.17", port=5051,scheduler=self.scheduler) #192.168.1.100  # Change to the Broker IP
+        self.socket_client = SocketClient(host="192.168.1.103", port=5051,scheduler=self.scheduler) #192.168.1.100  # Change to the Broker IP
         #self.socket_client.connect()
         print('SocketClient')
         self.pubsub = Node(self.socket_client, prefix='UDFJC/emb1/robot0/')
