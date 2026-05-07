@@ -89,7 +89,7 @@
       <h3>Conexión WebSocket</h3>
 
       <label>IP del Broker:</label>
-      <input id="ip" value="192.168.1.3">
+      <input id="ip" value="192.168.1.103">
 
       <label>Puerto:</label>
       <input id="port" value="5052">
@@ -233,7 +233,7 @@ class PubSub {
         for (const pattern in this.subs) {
             if (compareTopics(pattern, topic)) {
                 this.subs[pattern].forEach(cb => cb(topic, message));//, topic
-                console.log('publish',topic,this.subs[pattern],message)
+                //console.log('publish',topic,this.subs[pattern],message)
             }
         }
 
@@ -481,7 +481,7 @@ document.getElementById("btnSub").onclick = () => {
   ============================================================ */
   const canvas = document.getElementById("cam");
 const ctx = canvas.getContext("2d");
-const W = 40, H = 30;
+//const W = 40, H = 30;
 
 // Se suscribe al tópico: <basePrefix>/robot<id>/camera/frame
 bus.sub_pre("camera/frame", (topic,payload) => {
@@ -664,7 +664,131 @@ document.getElementById("btnStartCoreo").onclick = () => {
   </script>
 
 
+    <!-- ========================================================= -->
+    <!-- PANEL 6: Graphs -->
+    <!-- ========================================================= -->
+    <section class="panel" id="graphs">
+      
+      <!--p id="camInfo"></p--><div id="chartModule" style="margin-top:20px;">
+  <h3>Real-time Topic Monitor</h3>
 
+  <input type="text" id="topicInput" placeholder="Topic suffix">
+  <input type="text" id="keyInput" placeholder="Message key">
+  <button onclick="subscribeTopic()">Subscribe</button>
+
+  <canvas id="chartCanvas" width="600" height="300"></canvas>
+</div>
+    </section><script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+const datasets = {};
+const colors = ["red", "blue", "green", "orange", "purple", "cyan"];
+let colorIndex = 0;
+
+const ctx2 = document.getElementById('chartCanvas').getContext('2d');
+
+const chart = new Chart(ctx2, {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: []
+    },
+    options: {
+        animation: false,
+        responsive: true,
+        scales: {
+            x: { display: true },
+            y: { display: true }
+        }
+    }
+});
+
+// function subscribeTopic() {
+//     const topic = document.getElementById("topicInput").value;
+//     const key = document.getElementById("keyInput").value;
+
+//     const id = topic + ":" + key;
+
+//     if (!datasets[id]) {
+//         const color = colors[colorIndex++ % colors.length];
+
+//         const dataset = {
+//             label: id,
+//             data: [],
+//             borderColor: color,
+//             fill: false,
+//             tension: 0.1
+//         };
+
+//         datasets[id] = dataset;
+//         chart.data.datasets.push(dataset);
+//     }
+
+//     // Aquí debes conectar con tu sistema PubSub real
+    
+// }
+function subscribeTopic() {
+    const topicSuffix = document.getElementById("topicInput").value;
+    const key = document.getElementById("keyInput").value;
+
+    const fullTopic = `${bus.prefix}/${topicSuffix}`;
+    const id = fullTopic + ":" + key;
+
+    if (!datasets[id]) {
+        const color = colors[colorIndex++ % colors.length];
+
+        const dataset = {
+            label: id,
+            data: [],
+            borderColor: color,
+            fill: false,
+            tension: 0.1
+        };
+
+        datasets[id] = dataset;
+        chart.data.datasets.push(dataset);
+    }
+
+    // 🔥 AQUÍ está la magia: suscripción real al bus
+    bus.sub(fullTopic, (topic, message) => {
+
+        // Validar que el mensaje tenga el key
+        if (typeof message !== "object") return;
+        if (!(key in message)) return;
+
+        const value = message[key];
+
+        // Solo números (para gráfica)
+        if (typeof value !== "number") return;
+
+        addData(id, value);
+    });
+}
+
+function addData(id, value) {
+    const maxPoints = 20;
+
+    if (chart.data.labels.length < maxPoints) {
+        chart.data.labels.push("");
+    } else {
+        chart.data.labels.shift();
+        chart.data.labels.push("");
+    }
+
+    Object.keys(datasets).forEach(key => {
+        if (datasets[key].data.length >= maxPoints) {
+            datasets[key].data.shift();
+        }
+    });
+
+    datasets[id].data.push(value);
+
+    chart.update();
+}
+
+
+
+</script>
 
    </div>
  
