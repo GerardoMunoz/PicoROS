@@ -106,6 +106,7 @@ class RingBuffer:
         
 
     def append(self, value):
+        #print('append',value)
         self.data[self.index] = value
         self.count = self.count + 1
         self.index = self.count % self.size
@@ -130,23 +131,31 @@ class RingBuffer:
         return self.size if self.full else self.index
     
     def stats(self):
+        #print('stats1')
         data = self.get_disord()
-        if not data:
-            return None
-        return {
-            "min": min(data),
-            "max": max(data),
-            "avg": sum(data) / len(data),
+        ret_dic=  {
             "len": len(data),
             "count": self.count,
             "unit": self.unit
         }
 
+        #print('stats2',data)
+        if not data:
+            return ret_dic
+        #print('stats3',data)
+        return ret_dic | {
+            "min": min(data),
+            "max": max(data),
+            "avg": sum(data) / len(data)
+        }
+
 class Task:
-    def __init__(self, scheduler, period_ms, priority=1):
+    def __init__(self, scheduler, period_ms, priority=1,name=None):
         self.period = period_ms
         self.priority = priority
+        self.name = name or self.__class__.__name__
         self.next_run = time.ticks_ms()
+        self.scheduler=scheduler
         scheduler.add(self)
         self.metrics=RingBuffer();
 
@@ -162,8 +171,9 @@ class Task:
         self.update()
         end = time.ticks_us()
 
-        if self.metrics:
-            self.metrics.append(time.ticks_diff(end, start))
+        #print('update_measured',self.metrics)
+        #if self.metrics:
+        self.metrics.append(time.ticks_diff(end, start))
 
 
 class Scheduler:
@@ -188,6 +198,14 @@ class Scheduler:
             time.sleep_ms(1)
 
 
+    def stats(self):
+        stats_dic={}
+        
+        for task in self.tasks:
+            #print('Scheduler.stats',task)
+            stats_dic[task.name]=task.metrics.stats()
+        return stats_dic    
+            
 
 # =========================================================
 # WIFI
@@ -461,17 +479,20 @@ class Node:
 
 
 class WatchdogTask(Task):
-    def __init__(self, scheduler, pubsub, period_ms=60000):
+    def __init__(self, scheduler, pubsub, period_ms=1000):
         super().__init__(scheduler, period_ms)
         self.pubsub = pubsub
 
     def update(self):
-            self.pubsub.publish(
-                "debug/watchdog",
-                {
+            data={
                     "mem_free": gc.mem_free(),
-                    "mem_used": gc.mem_alloc()
-                }
+                    "mem_used": gc.mem_alloc(),
+                    
+                }|self.scheduler.stats()
+            print('WatchdogTask',data)
+            self.pubsub.publish(
+                "watchdog/stats",
+                data
             )
             #prnt("🐶 Watchdog")
             
@@ -573,26 +594,31 @@ class CameraSimulator(Task):
         else:
             t = int(time.time()*4) % self.WIDTH
         #prnt('_generate_frame.t',t,control_line)
-
         for i in range(0, len(self.buf), 2):
-            if (i//2)%(self.WIDTH)==t:
-                gb=1
+            x=(i//2)%(self.WIDTH)
+            y=(i//2)//(self.WIDTH)
+            if abs(x-t)<=3:
+                r=int(255*(1-abs(x-t)/3))
+                g=r
+                b=r
             else:
-                gb=0
+                #gb=0
 
-            car_angle=self.car_angle
-            while car_angle > math.pi:
-                car_angle -= 2*math.pi
-            #prnt("angulo1",self.angle)
-            while car_angle < -math.pi:
-                car_angle += 2*math.pi
-            #background = ((i//2)%(self.WIDTH))*256//self.WIDTH#(i * 10) % 256
-            pixel_angle=self.pixel_to_angle( car_angle, (i//2)%(self.WIDTH), self.WIDTH, fov=60)
-            background = int(pixel_angle*255/(2*math.pi)+math.pi)
-            #print('background',background,car_angle)
-            r=(1-gb)*background
-            g = min(gb*127+int((pixel_angle*18/math.pi)%2*64),255)#(128 + i * 15) % 256
-            b = gb*255#(255 - i * 35) % 256
+                car_angle=self.car_angle
+                while car_angle > math.pi:
+                    car_angle -= 2*math.pi
+                #prnt("angulo1",self.angle)
+                while car_angle < -math.pi:
+                    car_angle += 2*math.pi
+                #background = ((i//2)%(self.WIDTH))*256//self.WIDTH#(i * 10) % 256
+                pixel_angle=self.pixel_to_angle( car_angle, x, self.WIDTH, fov=60)
+                #background = int(pixel_angle*255/(2*math.pi)+math.pi)
+                #print('background',background,car_angle)
+                ang=15
+                alt=5            
+                r = (int((y//alt)*170+((pixel_angle*180/math.pi)//ang)*320)%255)#*background
+                g = (int((y//alt)*230+((pixel_angle*180/math.pi)//ang)*290)%255)#min(gb*127+int((pixel_angle*18/math.pi)%2*64),255)#(128 + i * 15) % 256
+                b = (int((y//alt)*370+((pixel_angle*180/math.pi)//ang)*190)%255)#gb*255#(255 - i * 35) % 256
 
             color = self.rgb565(r, g, b)
             hi = (color >> 8) & 0xFF
@@ -768,10 +794,10 @@ class MainApp:
 
         self.scheduler = Scheduler()
         print('Scheduler')
-        self.wifi = WiFiManager("Red_UD_LAMIC") # Ejemplo  Change to your WiFi
+        self.wifi = WiFiManager("PEREZ") # Ejemplo  Change to your WiFi
         #self.wifi.connect()
         print('WiFiManager')
-        self.socket_client = SocketClient(host="192.168.1.103", port=5051,scheduler=self.scheduler) #192.168.1.100  # Change to the Broker IP
+        self.socket_client = SocketClient(host="192.168.1.17", port=5051,scheduler=self.scheduler) #192.168.1.100  # Change to the Broker IP
         #self.socket_client.connect()
         print('SocketClient')
         self.pubsub = Node(self.socket_client, prefix='UDFJC/emb1/robot0/')
@@ -780,7 +806,7 @@ class MainApp:
         WatchdogTask(scheduler=self.scheduler, pubsub=self.pubsub)
         print('WatchdogTask')
         FollowLineControl(pubsub=self.pubsub)
-        CameraSimulator(scheduler=self.scheduler, pubsub=self.pubsub, width=40, height=30, period_ms=1000)
+        CameraSimulator(scheduler=self.scheduler, pubsub=self.pubsub, width=40, height=30, period_ms=500)
         print('CameraPublisherTask')
         #Arm(scheduler=self.scheduler, pubsub=self.pubsub,joint_state={"shoulder": 10, "elbow": 20, "wrist": 30})
         #print('Arm')
