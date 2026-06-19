@@ -1,797 +1,916 @@
 <!doctype html>
 <html>
+
 <head>
-  <meta charset="utf-8">
-  <title>Dashboard Pub/Sub</title>
+    <meta charset="utf-8">
+    <title>Dashboard Pub/Sub</title>
 
-  <style>
-    body {
-      margin: 0; padding: 0;
-      background: #ececec;
-      font-family: system-ui, sans-serif;
-    }
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #ececec;
+            font-family: system-ui, sans-serif;
+        }
 
-    h3 { margin: 0 0 8px 0; }
+        h3 {
+            margin: 0 0 8px 0;
+        }
 
-    /* ---- GRID DE PANELES ---- */
-    #grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 12px;
-      padding: 12px;
-    }
+        /* ---- GRID DE PANELES ---- */
+        #grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 12px;
+            padding: 12px;
+        }
 
-    .panel {
-      background: #fff;
-      padding: 12px;
-      border-radius: 10px;
-      box-shadow: 0px 2px 6px #0002;
-    }
+        .panel {
+            background: #fff;
+            padding: 12px;
+            border-radius: 10px;
+            box-shadow: 0px 2px 6px #0002;
+        }
 
-    /* ---- LOG ---- */
-    #log {
-      background: #111;
-      color: #0f0;
-      height: 200px;
-      overflow-y: auto;
-      border-radius: 6px;
-      padding: 10px;
-      white-space: pre-wrap;
-      font-family: monospace;
-    }
+        /* ---- LOG ---- */
+        #log {
+            background: #111;
+            color: #0f0;
+            height: 200px;
+            overflow-y: auto;
+            border-radius: 6px;
+            padding: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
 
-    /* ---- TOPIC FILTER BUTTONS ---- */
-    .topic-btn {
-      padding: 4px 8px;
-      background: #ccc;
-      border-radius: 6px;
-      border: none;
-      margin: 2px;
-      cursor: pointer;
-      font-size: 0.8rem;
-    }
-    .topic-btn.active {
-      background: #4caf50;
-      color: white;
-    }
+        /* ---- TOPIC FILTER BUTTONS ---- */
+        .topic-btn {
+            padding: 4px 8px;
+            background: #ccc;
+            border-radius: 6px;
+            border: none;
+            margin: 2px;
+            cursor: pointer;
+            font-size: 0.8rem;
+        }
 
-    /* ---- CANVAS CAMERA ---- */
-    #cam {
-      border: 1px solid #555;
-      image-rendering: pixelated;
-      width: 260px;
-      height: 320px;
-    }
+        .topic-btn.active {
+            background: #4caf50;
+            color: white;
+        }
 
-    input, button, textarea {
-      margin: 4px 0;
-      width: 100%;
-      padding: 6px;
-      box-sizing: border-box;
-      font-size: 1rem;
-    }
+        /* ---- CANVAS CAMERA ---- */
+        #cam {
+            border: 1px solid #555;
+            image-rendering: pixelated;
+            width: 260px;
+            height: 320px;
+        }
 
-    textarea {
-      height: 80px;
-      resize: vertical;
-    }
-  </style>
+        input,
+        button,
+        textarea {
+            margin: 4px 0;
+            width: 100%;
+            padding: 6px;
+            box-sizing: border-box;
+            font-size: 1rem;
+        }
+
+        textarea {
+            height: 80px;
+            resize: vertical;
+        }
+    </style>
 </head>
 
 
 <body>
-  <div id="grid">
+    <div id="grid">
 
-    <!-- ========================================================= -->
-    <!-- PANEL 1: CONEXIÓN WS -->
-    <!-- ========================================================= -->
-    <section class="panel" id="panel-connection">
-      <h3>Conexión WebSocket</h3>
+        <!-- ========================================================= -->
+        <!-- PANEL 1: CONEXIÓN WS -->
+        <!-- ========================================================= -->
+        <section class="panel" id="panel-connection">
+            <h3>Conexión WebSocket</h3>
 
-      <label>IP del Broker:</label>
-      <input id="ip" value="192.168.1.103">
+            <label>IP del Broker:</label>
+            <input id="ip" value="192.168.1.17">
 
-      <label>Puerto:</label>
-      <input id="port" value="5052">
+            <label>Puerto:</label>
+            <input id="port" value="5052">
 
-      <button id="btnConnect">Conectar</button>
-      <button id="btnDisconnect" disabled>Desconectar</button>
+            <button id="btnConnect">Conectar</button>
+            <button id="btnDisconnect" disabled>Desconectar</button>
 
-      <p id="status">Desconectado</p>
-    </section>
- <script>
+            <p id="status">Desconectado</p>
+        </section>
+        <script>
 
-const params = new URLSearchParams(window.location.search);
-const robotId = params.get("robot") || "0"; // default = 0
+            const params = new URLSearchParams(window.location.search);
+            const robotId = params.get("robot") || "0"; // default = 0
+            const remoteSubscriptions = new Set();
+            /* ============================================================
+               CLIENTE WEBSOCKET
+            ============================================================ */
+            let CLIENT_MAC = localStorage.getItem("client_mac");
+            if (!CLIENT_MAC) {
+                CLIENT_MAC = crypto.randomUUID();
+                localStorage.setItem("client_mac", CLIENT_MAC);
+            }
 
-  /* ============================================================
-     CLIENTE WEBSOCKET
-  ============================================================ */
-  let CLIENT_MAC = localStorage.getItem("client_mac");
-  if (!CLIENT_MAC) {
-      CLIENT_MAC = crypto.randomUUID();
-      localStorage.setItem("client_mac", CLIENT_MAC);
-  }
 
+            let ws = null;
 
-  let ws = null;
+            const statusBox = document.getElementById("status");
+            const btnConnect = document.getElementById("btnConnect");
+            const btnDisconnect = document.getElementById("btnDisconnect");
 
-  const statusBox = document.getElementById("status");
-  const btnConnect = document.getElementById("btnConnect");
-  const btnDisconnect = document.getElementById("btnDisconnect");
+            btnConnect.onclick = () => {
+                const ip = document.getElementById("ip").value;
+                const port = document.getElementById("port").value;
 
-  btnConnect.onclick = () => {
-    const ip = document.getElementById("ip").value;
-    const port = document.getElementById("port").value;
+                const url = `ws://${ip}:${port}/ws`;
+                logBox.textContent += `Intentando conectar a ${url}\n`;
 
-    const url = `ws://${ip}:${port}/ws`;
-    logBox.textContent += `Intentando conectar a ${url}\n`;
+                ws = new WebSocket(url);
+                ws.binaryType = "arraybuffer";
 
-    ws = new WebSocket(url);
-    ws.binaryType = "arraybuffer";
+                // ws.onopen = () => {
+                //   statusBox.textContent = "🟢 Conectado";
+                //   btnConnect.disabled = true;
+                //   btnDisconnect.disabled = true;
+                //   addLog("debug", "WS conectado");
+                // };
 
-    ws.onopen = () => {
-      statusBox.textContent = "🟢 Conectado";
-      btnConnect.disabled = true;
-      btnDisconnect.disabled = true;
-      addLog("debug", "WS conectado");
-    };
+                ws.onopen = () => {
+                    statusBox.textContent = "🟢 Conectado";
+                    btnConnect.disabled = true;
+                    btnDisconnect.disabled = false;
+                    addLog("debug", "WS conectado");
 
-    ws.onclose = () => {
-      statusBox.textContent = "🔴 Desconectado";
-      btnConnect.disabled = false;
-      btnDisconnect.disabled = true;
-      addLog("debug", "WS cerrado");
-    };
+                    // 🔁 RESUBSCRIBE EVERYTHING
+                    remoteSubscriptions.forEach(topic => {
+                        const obj = { action: "SUB", topic };
+                        ws.send(JSON.stringify(obj));
+                        addLog(topic, "SUB → WS reenviado");
+                    });
+                };
 
-    ws.onerror = (e) => {
-      addLog("debug", "WS error: " + e.message);
-    };
+                ws.onclose = () => {
+                    statusBox.textContent = "🔴 Desconectado";
+                    btnConnect.disabled = false;
+                    btnDisconnect.disabled = true;
+                    addLog("debug", "WS cerrado");
+                };
 
-    ws.onmessage = (ev) => {
-        //console.log('ws onmessage',ev);
-//        action: "PUB"
-        try {
-            msg = JSON.parse(ev.data);
-        } catch (e) {
-            console.error("JSON inválido:", e);
-            return;
-        }     
-        if (msg.action === "PUB") {
-                bus.publish(msg.topic, msg.data);
-                return;
-        }       // bus.publish(msg.topic, msg.data);
-    };
-  };
+                ws.onerror = (e) => {
+                    addLog("debug", "WS error: " + e.message);
+                };
 
-  btnDisconnect.onclick = () => {
-    if (ws) ws.close();
-  };
+                ws.onmessage = (ev) => {
+                    //console.log('ws onmessage',ev);
+                    //        action: "PUB"
+                    try {
+                        msg = JSON.parse(ev.data);
+                    } catch (e) {
+                        console.error("JSON inválido:", e);
+                        return;
+                    }
+                    if (msg.action === "PUB") {
+                        bus.publish(msg.topic, msg.data);
+                        return;
+                    }       // bus.publish(msg.topic, msg.data);
+                };
+            };
 
-  </script>
-<!-- ========================================================= -->
-<!-- PANEL 1.5: SUSCRIPCIONES ACTIVAS -->
-<!-- ========================================================= -->
-<section class="panel" id="panel-subs">
-  <h3>Suscripciones del PubSub</h3>
+            btnDisconnect.onclick = () => {
+                if (ws) ws.close();
+            };
 
-  <button id="btnRefreshSubs">Actualizar</button>
+        </script>
+        <!-- ========================================================= -->
+        <!-- PANEL 1.5: SUSCRIPCIONES ACTIVAS -->
+        <!-- ========================================================= -->
+        <section class="panel" id="panel-subs">
+            <h3>Suscripciones del PubSub</h3>
 
-  <ul id="subsList" style="
+            <button id="btnRefreshSubs">Actualizar</button>
+
+            <ul id="subsList" style="
         list-style: none; 
         padding-left: 0; 
         font-family: monospace;
         font-size: 0.85rem;">
-  </ul>
-</section>
+            </ul>
+        </section>
 
-<script>
-/* ============================================================
-   PANEL DE SUSCRIPCIONES DEL PUBSUB
-   ============================================================ */
-function compareTopics(pattern, topic) {
-    const p = pattern.split('/');
-    const t = topic.split('/');
+        <script>
+            /* ============================================================
+               PANEL DE SUSCRIPCIONES DEL PUBSUB
+               ============================================================ */
+            function compareTopics(pattern, topic) {
+                const p = pattern.split('/');
+                const t = topic.split('/');
 
-    for (let i = 0; i < p.length; i++) {
+                for (let i = 0; i < p.length; i++) {
 
-        // '#' coincide con cualquier cantidad de niveles (solo final)
-        if (p[i] === '#') return true;
+                    // '#' coincide con cualquier cantidad de niveles (solo final)
+                    if (p[i] === '#') return true;
 
-        // '+' coincide con exactamente un nivel
-        if (p[i] === '+') {
-            if (i >= t.length) return false;
-            continue;
-        }
+                    // '+' coincide con exactamente un nivel
+                    if (p[i] === '+') {
+                        if (i >= t.length) return false;
+                        continue;
+                    }
 
-        // Si el patrón es más largo que el tópico → no coincide
-        if (i >= t.length) return false;
+                    // Si el patrón es más largo que el tópico → no coincide
+                    if (i >= t.length) return false;
 
-        // comparación exacta
-        if (p[i] !== t[i]) return false;
-    }
+                    // comparación exacta
+                    if (p[i] !== t[i]) return false;
+                }
 
-    // Si sobraron niveles en el tópico → no coincide
-    return p.length === t.length;
-}
-
-
-/* ============================================================
-   PUBSUB LOCAL CON WILDCARDS
-   ============================================================ */
-class PubSub {
-    constructor() { this.subs = {}; }
-
-    subscribe(pattern, cb) {
-        if (!this.subs[pattern]) this.subs[pattern] = [];
-        this.subs[pattern].push(cb);
-        refreshSubscriptionsPanel()
-    }
-
-    publish(topic, message) {
-        //console.log('publish',topic, message);
-        for (const pattern in this.subs) {
-            if (compareTopics(pattern, topic)) {
-                this.subs[pattern].forEach(cb => cb(topic, message));//, topic
-                //console.log('publish',topic,this.subs[pattern],message)
+                // Si sobraron niveles en el tópico → no coincide
+                return p.length === t.length;
             }
-        }
 
-        // subscripción global '*'
-        if (this.subs["*"]) {
-            this.subs["*"].forEach(cb => cb(topic,  message));//topic,
-        }
-    }
-}
 
-const bus = new PubSub();
+            /* ============================================================
+               PUBSUB LOCAL CON WILDCARDS
+               ============================================================ */
+            class PubSub {
+                constructor() { this.subs = {}; }
 
-const subsList = document.getElementById("subsList");
-const btnRefreshSubs = document.getElementById("btnRefreshSubs");
+                subscribe(pattern, cb) {
+                    if (!this.subs[pattern]) this.subs[pattern] = [];
+                    this.subs[pattern].push(cb);
+                    refreshSubscriptionsPanel()
+                }
 
-function refreshSubscriptionsPanel() {
-    // Limpiar lista actual
-    subsList.innerHTML = "";
+                publish(topic, message) {
+                    //console.log('publish',topic, message);
+                    for (const pattern in this.subs) {
+                        if (compareTopics(pattern, topic)) {
+                            this.subs[pattern].forEach(cb => cb(topic, message));//, topic
+                            //console.log('publish',topic,this.subs[pattern],message)
+                        }
+                    }
 
-    // Recorrer patrones registrados en el PubSub
-    for (const pattern in bus.subs) {
-        const count = bus.subs[pattern].length;
+                    // subscripción global '*'
+                    if (this.subs["*"]) {
+                        this.subs["*"].forEach(cb => cb(topic, message));//topic,
+                    }
+                }
+            }
 
-        const li = document.createElement("li");
-        li.innerHTML = `
+            const bus = new PubSub();
+
+            const subsList = document.getElementById("subsList");
+            const btnRefreshSubs = document.getElementById("btnRefreshSubs");
+
+            function refreshSubscriptionsPanel() {
+                // Limpiar lista actual
+                subsList.innerHTML = "";
+
+                // Recorrer patrones registrados en el PubSub
+                for (const pattern in bus.subs) {
+                    const count = bus.subs[pattern].length;
+
+                    const li = document.createElement("li");
+                    li.innerHTML = `
             <b>${pattern}</b>
-            <span style="color:#888">(${count} callback${count!==1?'s':''})</span>
+            <span style="color:#888">(${count} callback${count !== 1 ? 's' : ''})</span>
         `;
-        subsList.appendChild(li);
-    }
-}
+                    subsList.appendChild(li);
+                }
+            }
 
-btnRefreshSubs.onclick = refreshSubscriptionsPanel;
+            btnRefreshSubs.onclick = refreshSubscriptionsPanel;
 
-// Llenar al cargar la página
-refreshSubscriptionsPanel();
-</script>
-    <!-- ========================================================= -->
-    <!-- PANEL 2: ENVÍO DE MENSAJES -->
-    <!-- ========================================================= -->
+            // Llenar al cargar la página
+            refreshSubscriptionsPanel();
+        </script>
         <!-- ========================================================= -->
-    <!-- PANEL 2: ENVÍO DE MENSAJES -->
-    <!-- ========================================================= -->
-    <section class="panel" id="panel-messages">
-      <h3>Mensajes</h3>
+        <!-- PANEL 2: ENVÍO DE MENSAJES -->
+        <!-- ========================================================= -->
+        <!-- ========================================================= -->
+        <!-- PANEL 2: ENVÍO DE MENSAJES -->
+        <!-- ========================================================= -->
+        <section class="panel" id="panel-messages">
+            <h3>Mensajes</h3>
 
-      <label>Prefijo base</label>
-      <input id="basePrefix" value="UDFJC/emb1">
+            <label>Prefijo base</label>
+            <input id="basePrefix" value="UDFJC/emb1">
 
-      <label>ID del robot</label>
-      <input id="robotId" type="number" value="0" min="0" step="1">
+            <label>ID del robot</label>
+            <input id="robotId" type="number" value="0" min="0" step="1">
 
-      <label>Prefijo completo (solo lectura)</label>
-      <input id="fullPrefix" >
+            <label>Prefijo completo (solo lectura)</label>
+            <input id="fullPrefix">
 
-      <hr>
+            <hr>
 
-      <label>Tópico (sufijo)</label>
-      <input id="msgTopic" value="RPi/sequence">
+            <label>Tópico (sufijo)</label>
+            <input id="msgTopic" value="RPi/sequence">
 
-      <label>Payload JSON</label>
-      <textarea id="msgPayload">{
+            <label>Payload JSON</label>
+            <textarea id="msgPayload">{
   "action": "execute_now",
   "name": "ymca"
 }
 </textarea>
 
-      <button id="btnPub">Publicar</button>
-      <button id="btnSub">Suscribir</button>
-    </section>
+            <button id="btnPub">Publicar</button>
+            <button id="btnSub">Suscribir</button>
+        </section>
 
-  <script>
-/* ============================================================
-   FUNCIÓN DE COMPARACIÓN DE TÓPICOS (wildcards estilo MQTT)
-   ============================================================ */
+        <script>
+            /* ============================================================
+               FUNCIÓN DE COMPARACIÓN DE TÓPICOS (wildcards estilo MQTT)
+               ============================================================ */
 
-// Inputs del panel de mensajes
-const basePrefixInput = document.getElementById("basePrefix");
-const robotIdInput    = document.getElementById("robotId");
-robotIdInput.value=robotId
-const fullPrefixInput = document.getElementById("fullPrefix");
+            // Inputs del panel de mensajes
+            const basePrefixInput = document.getElementById("basePrefix");
+            const robotIdInput = document.getElementById("robotId");
+            robotIdInput.value = robotId
+            const fullPrefixInput = document.getElementById("fullPrefix");
 
-// Calcula bus.prefix = basePrefix + "/robot" + robotId
-function updatePrefixFromParts() {
-    let base = (basePrefixInput.value || "").trim();
-    if (base.endsWith("/")) base = base.slice(0, -1);
+            // Calcula bus.prefix = basePrefix + "/robot" + robotId
+            function updatePrefixFromParts() {
+                let base = (basePrefixInput.value || "").trim();
+                if (base.endsWith("/")) base = base.slice(0, -1);
 
-//    let robotId = (robotIdInput.value || "").trim();
-    if (robotId === "") robotId = "0";
+                //    let robotId = (robotIdInput.value || "").trim();
+                if (robotId === "") robotId = "0";
 
-    fullPrefixInput.value = base + "/robot" + robotId;
-    bus.prefix = fullPrefixInput.value;
-}
+                fullPrefixInput.value = base + "/robot" + robotId;
+                bus.prefix = fullPrefixInput.value;
+            }
 
-// Inicializar y enganchar eventos
-updatePrefixFromParts()
-basePrefixInput.onchange = updatePrefixFromParts;
-robotIdInput.onchange = updatePrefixFromParts;
-fullPrefixInput.onchange = updatePrefixFromFull;
-
-
-function updatePrefixFromFull() {
-    bus.prefix = fullPrefixInput.value.trim();
-}
-
-/* ============================================================
-   EXTENSIONES DEL BUS: API PUB / SUB PARA TODA LA PÁGINA
-   ============================================================ */
-
-bus.pub = function (topic, message) {
-    // Publicación local
-    bus.publish(topic, message);
-
-    // Enviar al WebSocket si está activo
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        const obj = { action: "PUB", topic, data: message };
-        ws.send(JSON.stringify(obj));
-        addLog(topic, "PUB → WS");
-    } else {
-        addLog(topic, "PUB (solo local, WS no conectado)");
-    }
-};
-
-bus.pub_pre = function (sufijo, message) {
-    let suf = (sufijo || "").trim();
-    if (suf.startsWith("/")) suf = suf.slice(1);
-    bus.pub(bus.prefix + "/" + suf, message);
-};
-
-bus.sub = function (topic, callback) {
-    // Suscripción local con wildcards
-    bus.subscribe(topic, callback);
-    addLog(topic, "SUB local registrado");
-
-    // Suscripción remota por WebSocket
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        const obj = { action: "SUB", topic };
-        ws.send(JSON.stringify(obj));
-        addLog(topic, "SUB → WS enviado");
-    } else {
-        addLog(topic, "SUB (solo local, WS no conectado)");
-    }
-};
-
-bus.sub_pre = function (sufijo, callback) {
-    let suf = (sufijo || "").trim();
-    if (suf.startsWith("/")) suf = suf.slice(1);
-    bus.sub(bus.prefix + "/" + suf, callback);
-};
-/* ============================================================
-   BOTONES PUB / SUB (actualizados para usar bus.pub y bus.sub)
-   ============================================================ */
-
-document.getElementById("btnPub").onclick = () => {
-    const sufix = document.getElementById("msgTopic").value;
-    const topic = `${bus.prefix}/${sufix}`;
-    const data  = JSON.parse(document.getElementById("msgPayload").value);
-
-    bus.pub(topic, data);
-};
-
-document.getElementById("btnSub").onclick = () => {
-    const sufix = document.getElementById("msgTopic").value;
-    const topic = `${bus.prefix}/${sufix}`;
-
-    bus.sub(topic, (msg, t) => {
-        addLog(t, "SUB recibió mensaje");
-    });
-};
+            // Inicializar y enganchar eventos
+            updatePrefixFromParts()
+            basePrefixInput.onchange = updatePrefixFromParts;
+            robotIdInput.onchange = updatePrefixFromParts;
+            fullPrefixInput.onchange = updatePrefixFromFull;
 
 
+            function updatePrefixFromFull() {
+                bus.prefix = fullPrefixInput.value.trim();
+            }
 
-  </script>
-    <!-- ========================================================= -->
-    <!-- PANEL 3: LOG CON FILTROS -->
-    <!-- ========================================================= -->
-    <section class="panel" id="panel-log">
-      <h3>Log</h3>
+            /* ============================================================
+               EXTENSIONES DEL BUS: API PUB / SUB PARA TODA LA PÁGINA
+               ============================================================ */
 
-      <div id="filters"></div>
-      <pre id="log"></pre>
-    </section>
-<script>
-  /* ============================================================
-     LOG + FILTRO
-  ============================================================ */
-  const logBox = document.getElementById("log");
-  const filtersDiv = document.getElementById("filters");
-  const topicButtons = {};
-  let visibleTopics = new Set();
+            bus.pub = function (topic, message) {
+                // Publicación local
+                bus.publish(topic, message);
 
-  function addTopicButton(topic) {
-    if (topicButtons[topic]) return;
-    visibleTopics.add(topic);
+                // Enviar al WebSocket si está activo
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    const obj = { action: "PUB", topic, data: message };
+                    ws.send(JSON.stringify(obj));
+                    addLog(topic, "PUB → WS");
+                } else {
+                    addLog(topic, "PUB (solo local, WS no conectado)");
+                }
+            };
 
-    const btn = document.createElement("button");
-    btn.className = "topic-btn active";
-    btn.textContent = topic;
-    btn.onclick = () => {
-      const active = btn.classList.toggle("active");
-      if (active) visibleTopics.add(topic);
-      else visibleTopics.delete(topic);
-    };
+            bus.pub_pre = function (sufijo, message) {
+                let suf = (sufijo || "").trim();
+                if (suf.startsWith("/")) suf = suf.slice(1);
+                bus.pub(bus.prefix + "/" + suf, message);
+            };
 
-    filtersDiv.appendChild(btn);
-    topicButtons[topic] = btn;
-  }
+            // bus.sub = function (topic, callback) {
+            //     // Suscripción local con wildcards
+            //     bus.subscribe(topic, callback);
+            //     addLog(topic, "SUB local registrado");
 
-  function addLog(topic, txt) {
-    if (!topicButtons[topic]) addTopicButton(topic);
-    if (!visibleTopics.has(topic)) return;
+            //     // Suscripción remota por WebSocket
+            //     if (ws && ws.readyState === WebSocket.OPEN) {
+            //         const obj = { action: "SUB", topic };
+            //         ws.send(JSON.stringify(obj));
+            //         addLog(topic, "SUB → WS enviado");
+            //     } else {
+            //         addLog(topic, "SUB (solo local, WS no conectado)");
+            //     }
+            // };
 
-    logBox.textContent += `[${topic}] ${txt}\n`;
-    logBox.scrollTop = logBox.scrollHeight;
-  }
+            bus.sub = function (topic, callback) {
+                // 1. Local subscription (always works)
+                bus.subscribe(topic, callback);
+                addLog(topic, "SUB local registrado");
 
-  bus.subscribe("*", (topic, msg) => {//topic,
-    //console.log('bus.subscribe',msg)
-    if (typeof msg === 'object'){
-        addLog(topic,  Object.keys(msg) );
-    }
-    else {
-        addLog(topic, msg );
-    }
-  });
- 
-  </script>
+                // 2. Store for later (important)
+                remoteSubscriptions.add(topic);
+
+                // 3. Send immediately ONLY if connected
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    const obj = { action: "SUB", topic };
+                    ws.send(JSON.stringify(obj));
+                    addLog(topic, "SUB → WS enviado");
+                } else {
+                    addLog(topic, "SUB guardado (WS desconectado)");
+                }
+            };
+
+            bus.sub_pre = function (sufijo, callback) {
+                let suf = (sufijo || "").trim();
+                if (suf.startsWith("/")) suf = suf.slice(1);
+                bus.sub(bus.prefix + "/" + suf, callback);
+            };
+            /* ============================================================
+               BOTONES PUB / SUB (actualizados para usar bus.pub y bus.sub)
+               ============================================================ */
+
+            document.getElementById("btnPub").onclick = () => {
+                const sufix = document.getElementById("msgTopic").value;
+                const topic = `${bus.prefix}/${sufix}`;
+                const data = JSON.parse(document.getElementById("msgPayload").value);
+
+                bus.pub(topic, data);
+            };
+
+            document.getElementById("btnSub").onclick = () => {
+                const sufix = document.getElementById("msgTopic").value;
+                const topic = `${bus.prefix}/${sufix}`;
+
+                bus.sub(topic, (msg, t) => {
+                    addLog(t, "SUB recibió mensaje");
+                });
+            };
 
 
 
-    <!-- ========================================================= -->
-    <!-- PANEL 4: VISUALIZADOR DE CÁMARA -->
-    <!-- ========================================================= -->
-    <section class="panel" id="panel-camera">
-      <h3>Cámara (camera/frame)</h3>
+        </script>
+        <!-- ========================================================= -->
+        <!-- PANEL 3: LOG CON FILTROS -->
+        <!-- ========================================================= -->
+        <section class="panel" id="panel-log">
+            <h3>Log</h3>
 
-      <canvas id="cam" width="160" height="120"></canvas>
-      <p id="camInfo"></p>
-    </section>
+            <div id="filters"></div>
+            <pre id="log"></pre>
+        </section>
+        <script>
+            /* ============================================================
+               LOG + FILTRO
+            ============================================================ */
+            const logBox = document.getElementById("log");
+            const filtersDiv = document.getElementById("filters");
+            const topicButtons = {};
+            let visibleTopics = new Set();
 
+            function addTopicButton(topic) {
+                if (topicButtons[topic]) return;
+                visibleTopics.add(topic);
 
-  <script>
-  /* ============================================================
-     VISUALIZADOR DE CÁMARA (camera/frame con RGB565)
-  ============================================================ */
-  const canvas = document.getElementById("cam");
-const ctx = canvas.getContext("2d");
-//const W = 40, H = 30;
+                const btn = document.createElement("button");
+                btn.className = "topic-btn active";
+                btn.textContent = topic;
+                btn.onclick = () => {
+                    const active = btn.classList.toggle("active");
+                    if (active) visibleTopics.add(topic);
+                    else visibleTopics.delete(topic);
+                };
 
-// Se suscribe al tópico: <basePrefix>/robot<id>/camera/frame
-bus.sub_pre("camera/frame", (topic,payload) => {
+                filtersDiv.appendChild(btn);
+                topicButtons[topic] = btn;
+            }
 
-    let msg=payload;
+            function addLog(topic, txt) {
+                if (!topicButtons[topic]) addTopicButton(topic);
+                if (!visibleTopics.has(topic)) return;
 
-    const w = msg.w;
-    const h = msg.h;
-//    const b64 = msg.frame_b64;
-    const b64 = msg.frame.replace(/\s/g, '');
+                logBox.textContent += `[${topic}] ${txt}\n`;
+                logBox.scrollTop = logBox.scrollHeight;
+            }
 
-    // --- Decodificar base64 a Uint8Array ---
-    const binary = atob(b64);      // decodifica base64 → string binario
-    const u8 = new Uint8Array(binary.length);
-
-    for (let i = 0; i < binary.length; i++) {
-        u8[i] = binary.charCodeAt(i);
-    }
-
-    // --- Convertir RGB565 → RGBA ---
-    const img = ctx.createImageData(w, h);
-    const data = img.data;
-
-    for (let i = 0; i < u8.length; i += 2) {
-        const rgb565 = (u8[i] << 8) | u8[i+1];
-        const r = ((rgb565 >> 11) & 0x1F) << 3;
-        const g = ((rgb565 >> 5) & 0x3F) << 2;
-        const b = (rgb565 & 0x1F) << 3;
-
-        const idx = (i >> 1) * 4;
-        data[idx]   = r;
-        data[idx+1] = g;
-        data[idx+2] = b;
-        data[idx+3] = 255;
-    }
-
-    ctx.putImageData(img, 0, 0);
-
-    document.getElementById("camInfo").textContent =
-        `Frame RGB565 ~ ${u8.length} bytes (${w}x${h})`;
-});
-
-
-  </script>
-
-    <!-- ========================================================= -->
-    <!-- PANEL 5: Gemelo Virtual -->
-    <!-- ========================================================= -->
-    <section class="panel" id="panel-gemelo">
-      <h3>Gemelo</h3>
-      <input id="coreoName" value="ymca">
-      <button id="btnSubRobot">Suscribir Robot</button>
-      <button id="btnStartCoreo">Iniciar Coreografía</button>
-      <div id="render1" style="width:100%; height:300px;"></div>
-      <!--canvas id="canvas-gemelo" width="130" height="130"></canvas-->
-      <!--p id="camInfo"></p-->
-    </section>
-
-
-
-  <script type="module">
-  /* ============================================================
-     Gemelo virtual
-  ============================================================ */
-//   const canvas_gemelo = document.getElementById("canvas-gemelo");
-//   const ctx_gemelo = canvas_gemelo.getContext("2d");
-
-// bus.subscribe("UDFJC/emb1/robot0/RPi/state", (payload) => {
-//  });
-
-// bus.subscribe("UDFJC/emb1/robot0/RPi/sequence", (payload) => {
-//  });
-
-
-import { CorridorScene } from "./3D/CorridorScene.js";
-import { RoDifArm } from "./3D/RoDifArm.js";
-
-const world = new CorridorScene(document.getElementById("render1"));
-///////////////////// Robots
-const n_bots =10
-//
-//const bus=null
-document.getElementById("btnSubRobot").onclick = () =>{
-  const n_robot = Number(document.getElementById("robotId").value);
-  const robot = new RoDifArm(world, bus, { x:0, y: (n_robot - n_bots / 2) * 5 });
-  //console.log('btnSubRobot listo')
-  //robot.attachSubscriptions()
-};
-
-
-document.getElementById("btnStartCoreo").onclick = () => {
-
-    const name = document.getElementById("coreoName").value.trim();
-    const coreo = name === "" ? "ymca" : name;
-    //console.log('paner_twin',coreo)
-    //robot.runSequence(coreo);
-
-    // const msg = {
-    //     action: "PUB",
-    //     topic: camera_prefix+"/RPi/sequence",
-    //     data: {
-    //         "action": "execute_now",
-    //         "name": coreo
-    //         }
-    // };
-
-    bus.pub_pre("RPi/sequence", {
-            "action": "execute_now",
-            "name": coreo
+            bus.subscribe("*", (topic, msg) => {//topic,
+                //console.log('bus.subscribe',msg)
+                if (typeof msg === 'object') {
+                    addLog(topic, Object.keys(msg));
+                }
+                else {
+                    addLog(topic, msg);
+                }
             });
 
-    // document.getElementById("coreoStatus").textContent =
-    //   `Coreografía enviada: ${coreo}`;
-};
+        </script>
 
 
 
-//   bus.sub_pre("/RPi/sequence", (topic, msg) => {
-//     console.log('bus.subscribe',msg)
-//     if (typeof msg === 'object'){
-//         addLog(topic,  Object.keys(msg) );
-//     }
-//     else {
-//         addLog(topic, msg );
-//     }
-//   });
+        <!-- ========================================================= -->
+        <!-- PANEL 4: VISUALIZADOR DE CÁMARA -->
+        <!-- ========================================================= -->
+        <section class="panel" id="panel-camera">
+            <h3>Cámara (camera/frame)</h3>
 
-    // const beat = 1;
-    // const n_beats = 5;
-    // const tiempo = n_beats * beat;
-    // const d = 1;
-    // const R = 2.5;
-    // const omega = Math.PI / tiempo;
-    // const vel_lin = omega * R;
-
-    // const sequences = {"ymca":[
-    //       { v: 1, w: 0, alpha0: 0, time: 2 },
-    //       { v: 0, w: -Math.PI / 4, alpha0: -Math.PI / 2, alpha1: 0, time: 2 },
-    //       { v: vel_lin, w: omega, time: tiempo },
-    //       {
-    //         v: 0,
-    //         w: 0,
-    //         alpha0: Math.PI / 2,
-    //         alpha1: (6 * Math.PI) / 16,
-    //         alpha2: -(6 * Math.PI) / 16,
-    //         time: 2,
-    //       },
-    //       { v: -vel_lin, w: omega, time: tiempo },
-    //       { v: 1, w: 0, alpha0: 0, time: 2 },
-    //       {
-    //         v: 0,
-    //         w: -Math.PI / 4,
-    //         alpha0: Math.PI / 2,
-    //         alpha1: (6 * Math.PI) / 16,
-    //         alpha2: -(6 * Math.PI) / 16,
-    //         time: 2,
-    //       },
-    //       { v: -vel_lin, w: omega, time: tiempo },
-    //       { v: 0, w: 0, alpha0: -Math.PI / 2, alpha1: 0, alpha2: 0, time: 2 },
-    //       { v: vel_lin, w: omega, time: tiempo },        
-    //     ]};
+            <canvas id="cam" width="160" height="120"></canvas>
+            <p id="camInfo"></p>
+        </section>
 
 
+        <script>
+            /* ============================================================
+               VISUALIZADOR DE CÁMARA (camera/frame con RGB565)
+            ============================================================ */
+            const canvas = document.getElementById("cam");
+            const ctx = canvas.getContext("2d");
+            //const W = 40, H = 30;
+
+            // Se suscribe al tópico: <basePrefix>/robot<id>/camera/frame
+            bus.sub_pre("camera/frame", (topic, payload) => {
+
+                let msg = payload;
+
+                const w = msg.w;
+                const h = msg.h;
+                //    const b64 = msg.frame_b64;
+                const b64 = msg.frame.replace(/\s/g, '');
+
+                // --- Decodificar base64 a Uint8Array ---
+                const binary = atob(b64);      // decodifica base64 → string binario
+                const u8 = new Uint8Array(binary.length);
+
+                for (let i = 0; i < binary.length; i++) {
+                    u8[i] = binary.charCodeAt(i);
+                }
+
+                // --- Convertir RGB565 → RGBA ---
+                const img = ctx.createImageData(w, h);
+                const data = img.data;
+
+                for (let i = 0; i < u8.length; i += 2) {
+                    const rgb565 = (u8[i] << 8) | u8[i + 1];
+                    const r = ((rgb565 >> 11) & 0x1F) << 3;
+                    const g = ((rgb565 >> 5) & 0x3F) << 2;
+                    const b = (rgb565 & 0x1F) << 3;
+
+                    const idx = (i >> 1) * 4;
+                    data[idx] = r;
+                    data[idx + 1] = g;
+                    data[idx + 2] = b;
+                    data[idx + 3] = 255;
+                }
+
+                ctx.putImageData(img, 0, 0);
+
+                document.getElementById("camInfo").textContent =
+                    `Frame RGB565 ~ ${u8.length} bytes (${w}x${h})`;
+            });
 
 
+        </script>
 
-    function coreografia(){
-      music.volume = 0.7;
-      music.currentTime = 0; 
-      music.play().then(() => {
-        console.log("Música iniciada");
-        console.log("🎵 Duración total:", music.duration, "segundos");
-      }).catch(err => console.warn("Error al reproducir:", err));
-      setTimeout(() => music.pause(), 16000);
-      set_sequences()
-    }
-
-
-
-  </script>
-
-
-    <!-- ========================================================= -->
-    <!-- PANEL 6: Graphs -->
-    <!-- ========================================================= -->
-    <section class="panel" id="graphs">
-      
-      <!--p id="camInfo"></p--><div id="chartModule" style="margin-top:20px;">
-  <h3>Real-time Topic Monitor</h3>
-
-  <input type="text" id="topicInput" placeholder="Topic suffix">
-  <input type="text" id="keyInput" placeholder="Message key">
-  <button onclick="subscribeTopic()">Subscribe</button>
-
-  <canvas id="chartCanvas" width="600" height="300"></canvas>
-</div>
-    </section><script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<script>
-const datasets = {};
-const colors = ["red", "blue", "green", "orange", "purple", "cyan"];
-let colorIndex = 0;
-
-const ctx2 = document.getElementById('chartCanvas').getContext('2d');
-
-const chart = new Chart(ctx2, {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: []
-    },
-    options: {
-        animation: false,
-        responsive: true,
-        scales: {
-            x: { display: true },
-            y: { display: true }
-        }
-    }
-});
-
-// function subscribeTopic() {
-//     const topic = document.getElementById("topicInput").value;
-//     const key = document.getElementById("keyInput").value;
-
-//     const id = topic + ":" + key;
-
-//     if (!datasets[id]) {
-//         const color = colors[colorIndex++ % colors.length];
-
-//         const dataset = {
-//             label: id,
-//             data: [],
-//             borderColor: color,
-//             fill: false,
-//             tension: 0.1
-//         };
-
-//         datasets[id] = dataset;
-//         chart.data.datasets.push(dataset);
-//     }
-
-//     // Aquí debes conectar con tu sistema PubSub real
-    
-// }
-function subscribeTopic() {
-    const topicSuffix = document.getElementById("topicInput").value;
-    const key = document.getElementById("keyInput").value;
-
-    const fullTopic = `${bus.prefix}/${topicSuffix}`;
-    const id = fullTopic + ":" + key;
-
-    if (!datasets[id]) {
-        const color = colors[colorIndex++ % colors.length];
-
-        const dataset = {
-            label: id,
-            data: [],
-            borderColor: color,
-            fill: false,
-            tension: 0.1
-        };
-
-        datasets[id] = dataset;
-        chart.data.datasets.push(dataset);
-    }
-
-    // 🔥 AQUÍ está la magia: suscripción real al bus
-    bus.sub(fullTopic, (topic, message) => {
-
-        // Validar que el mensaje tenga el key
-        if (typeof message !== "object") return;
-        if (!(key in message)) return;
-
-        const value = message[key];
-
-        // Solo números (para gráfica)
-        if (typeof value !== "number") return;
-
-        addData(id, value);
-    });
-}
-
-function addData(id, value) {
-    const maxPoints = 20;
-
-    if (chart.data.labels.length < maxPoints) {
-        chart.data.labels.push("");
-    } else {
-        chart.data.labels.shift();
-        chart.data.labels.push("");
-    }
-
-    Object.keys(datasets).forEach(key => {
-        if (datasets[key].data.length >= maxPoints) {
-            datasets[key].data.shift();
-        }
-    });
-
-    datasets[id].data.push(value);
-
-    chart.update();
-}
+        <!-- ========================================================= -->
+        <!-- PANEL 5: Gemelo Virtual -->
+        <!-- ========================================================= -->
+        <section class="panel" id="panel-gemelo">
+            <h3>Gemelo</h3>
+            <input id="coreoName" value="ymca">
+            <button id="btnSubRobot">Suscribir Robot</button>
+            <button id="btnStartCoreo">Iniciar Coreografía</button>
+            <div id="render1" style="width:100%; height:300px;"></div>
+            <!--canvas id="canvas-gemelo" width="130" height="130"></canvas-->
+            <!--p id="camInfo"></p-->
+        </section>
 
 
 
-</script>
+        <script type="module">
+            /* ============================================================
+               Gemelo virtual
+            ============================================================ */
+            //   const canvas_gemelo = document.getElementById("canvas-gemelo");
+            //   const ctx_gemelo = canvas_gemelo.getContext("2d");
 
-   </div>
- 
+            // bus.subscribe("UDFJC/emb1/robot0/RPi/state", (payload) => {
+            //  });
+
+            // bus.subscribe("UDFJC/emb1/robot0/RPi/sequence", (payload) => {
+            //  });
+
+
+            import { CorridorScene } from "./3D/CorridorScene.js";
+            import { RoDifArm } from "./3D/RoDifArm.js";
+
+            const world = new CorridorScene(document.getElementById("render1"));
+            ///////////////////// Robots
+            const n_bots = 10
+            //
+            //const bus=null
+            document.getElementById("btnSubRobot").onclick = () => {
+                const n_robot = Number(document.getElementById("robotId").value);
+                const robot = new RoDifArm(world, bus, { x: 0, y: (n_robot - n_bots / 2) * 5 });
+                //console.log('btnSubRobot listo')
+                //robot.attachSubscriptions()
+            };
+
+
+            document.getElementById("btnStartCoreo").onclick = () => {
+
+                const name = document.getElementById("coreoName").value.trim();
+                const coreo = name === "" ? "ymca" : name;
+                //console.log('paner_twin',coreo)
+                //robot.runSequence(coreo);
+
+                // const msg = {
+                //     action: "PUB",
+                //     topic: camera_prefix+"/RPi/sequence",
+                //     data: {
+                //         "action": "execute_now",
+                //         "name": coreo
+                //         }
+                // };
+
+                bus.pub_pre("RPi/sequence", {
+                    "action": "execute_now",
+                    "name": coreo
+                });
+
+                // document.getElementById("coreoStatus").textContent =
+                //   `Coreografía enviada: ${coreo}`;
+            };
+
+
+
+            //   bus.sub_pre("/RPi/sequence", (topic, msg) => {
+            //     console.log('bus.subscribe',msg)
+            //     if (typeof msg === 'object'){
+            //         addLog(topic,  Object.keys(msg) );
+            //     }
+            //     else {
+            //         addLog(topic, msg );
+            //     }
+            //   });
+
+            // const beat = 1;
+            // const n_beats = 5;
+            // const tiempo = n_beats * beat;
+            // const d = 1;
+            // const R = 2.5;
+            // const omega = Math.PI / tiempo;
+            // const vel_lin = omega * R;
+
+            // const sequences = {"ymca":[
+            //       { v: 1, w: 0, alpha0: 0, time: 2 },
+            //       { v: 0, w: -Math.PI / 4, alpha0: -Math.PI / 2, alpha1: 0, time: 2 },
+            //       { v: vel_lin, w: omega, time: tiempo },
+            //       {
+            //         v: 0,
+            //         w: 0,
+            //         alpha0: Math.PI / 2,
+            //         alpha1: (6 * Math.PI) / 16,
+            //         alpha2: -(6 * Math.PI) / 16,
+            //         time: 2,
+            //       },
+            //       { v: -vel_lin, w: omega, time: tiempo },
+            //       { v: 1, w: 0, alpha0: 0, time: 2 },
+            //       {
+            //         v: 0,
+            //         w: -Math.PI / 4,
+            //         alpha0: Math.PI / 2,
+            //         alpha1: (6 * Math.PI) / 16,
+            //         alpha2: -(6 * Math.PI) / 16,
+            //         time: 2,
+            //       },
+            //       { v: -vel_lin, w: omega, time: tiempo },
+            //       { v: 0, w: 0, alpha0: -Math.PI / 2, alpha1: 0, alpha2: 0, time: 2 },
+            //       { v: vel_lin, w: omega, time: tiempo },        
+            //     ]};
+
+
+
+
+
+            function coreografia() {
+                music.volume = 0.7;
+                music.currentTime = 0;
+                music.play().then(() => {
+                    console.log("Música iniciada");
+                    console.log("🎵 Duración total:", music.duration, "segundos");
+                }).catch(err => console.warn("Error al reproducir:", err));
+                setTimeout(() => music.pause(), 16000);
+                set_sequences()
+            }
+
+
+
+        </script>
+
+
+        <!-- ========================================================= -->
+        <!-- PANEL 6: Graphs -->
+        <!-- ========================================================= -->
+        <section class="panel" id="graphs">
+
+            <!--p id="camInfo"></p-->
+            <div id="chartModule" style="margin-top:20px;">
+                <h3>Real-time Topic Monitor</h3>
+
+                <input type="text" id="topicInput" placeholder="Topic suffix">
+                <input type="text" id="keyInput" placeholder="Message key">
+                <button onclick="subscribeTopic()">Subscribe</button>
+
+                <canvas id="chartCanvas" width="600" height="300"></canvas>
+            </div>
+        </section>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+        <script>
+            const datasets = {};
+            const colors = ["red", "blue", "green", "orange", "purple", "cyan"];
+            let colorIndex = 0;
+
+            const ctx2 = document.getElementById('chartCanvas').getContext('2d');
+
+            const chart = new Chart(ctx2, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: []
+                },
+                options: {
+                    animation: false,
+                    responsive: true,
+                    scales: {
+                        x: { display: true },
+                        y: { display: true }
+                    }
+                }
+            });
+
+            // function subscribeTopic() {
+            //     const topic = document.getElementById("topicInput").value;
+            //     const key = document.getElementById("keyInput").value;
+
+            //     const id = topic + ":" + key;
+
+            //     if (!datasets[id]) {
+            //         const color = colors[colorIndex++ % colors.length];
+
+            //         const dataset = {
+            //             label: id,
+            //             data: [],
+            //             borderColor: color,
+            //             fill: false,
+            //             tension: 0.1
+            //         };
+
+            //         datasets[id] = dataset;
+            //         chart.data.datasets.push(dataset);
+            //     }
+
+            //     // Aquí debes conectar con tu sistema PubSub real
+
+            // }
+            function subscribeTopic() {
+                const topicSuffix = document.getElementById("topicInput").value;
+                const key = document.getElementById("keyInput").value;
+
+                const fullTopic = `${bus.prefix}/${topicSuffix}`;
+                const id = fullTopic + ":" + key;
+
+                if (!datasets[id]) {
+                    const color = colors[colorIndex++ % colors.length];
+
+                    const dataset = {
+                        label: id,
+                        data: [],
+                        borderColor: color,
+                        fill: false,
+                        tension: 0.1
+                    };
+
+                    datasets[id] = dataset;
+                    chart.data.datasets.push(dataset);
+                }
+
+                // 🔥 AQUÍ está la magia: suscripción real al bus
+                bus.sub(fullTopic, (topic, message) => {
+
+                    // Validar que el mensaje tenga el key
+                    if (typeof message !== "object") return;
+                    if (!(key in message)) return;
+
+                    const value = message[key];
+
+                    // Solo números (para gráfica)
+                    if (typeof value !== "number") return;
+
+                    addData(id, value);
+                });
+            }
+
+            function addData(id, value) {
+                const maxPoints = 20;
+
+                if (chart.data.labels.length < maxPoints) {
+                    chart.data.labels.push("");
+                } else {
+                    chart.data.labels.shift();
+                    chart.data.labels.push("");
+                }
+
+                Object.keys(datasets).forEach(key => {
+                    if (datasets[key].data.length >= maxPoints) {
+                        datasets[key].data.shift();
+                    }
+                });
+
+                datasets[id].data.push(value);
+
+                chart.update();
+            }
+
+
+
+        </script>
+        <!-- ========================================================= -->
+        <!-- PANEL 7: Stats -->
+        <!-- ========================================================= -->
+        <section class="panel" id="panel-network">
+            <h3>Network Stats (Watchdog)</h3>
+
+            <p>RSSI: <span id="rssi">-</span> dBm</p>
+            <p>Packet Loss: <span id="loss">-</span> %</p>
+            <p>Latency: <span id="latency">-</span> ms</p>
+            <p>Jitter: <span id="jitter">-</span> ms</p>
+        </section>
+
+        <script>
+            /* ============================================================
+               WATCHDOG NETWORK STATS
+            ============================================================ */
+
+            let lastSeq = null;
+            let received = 0;
+            let lost = 0;
+
+            let lastLatency = null;
+            let jitter = 0;
+
+            // Moving averages
+            let latencyAvg = 0;
+            let alpha = 0.2;
+
+            bus.sub_pre("watchdog/stats", (topic, msg) => {
+
+                // --- 1. RSSI ---
+                if ("rssi" in msg) {
+                    document.getElementById("rssi").textContent = msg.rssi;
+                }
+
+                // --- 2. PACKET LOSS ---
+                if ("seq" in msg) {
+                    if (lastSeq !== null) {
+                        const diff = msg.seq - lastSeq;
+
+                        if (diff > 1) {
+                            lost += (diff - 1);
+                        }
+                    }
+
+                    received += 1;
+                    lastSeq = msg.seq;
+
+                    const lossRate = (lost / (received + lost)) * 100;
+                    document.getElementById("loss").textContent = lossRate.toFixed(2);
+                }
+
+                // --- 3. LATENCY ---
+                if ("sent_ts" in msg && "ack_ts" in msg) {
+                    const latency = msg.ack_ts - msg.sent_ts;
+
+                    // moving average
+                    latencyAvg = alpha * latency + (1 - alpha) * latencyAvg;
+
+                    document.getElementById("latency").textContent =
+                        latencyAvg.toFixed(1);
+                }
+
+                // --- 4. JITTER ---
+                if ("sent_ts" in msg && "ack_ts" in msg) {
+                    const latency = msg.ack_ts - msg.sent_ts;
+
+                    if (lastLatency !== null) {
+                        jitter = Math.abs(latency - lastLatency);
+                    }
+
+                    lastLatency = latency;
+
+                    document.getElementById("jitter").textContent =
+                        jitter.toFixed(1);
+                }
+
+            });
+        </script>
+    </div>
+
 </body>
-</html>
 
+</html>
