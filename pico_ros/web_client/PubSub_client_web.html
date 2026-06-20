@@ -858,6 +858,33 @@
             let latencyAvg = 0;
             let alpha = 0.2;
 
+            function setupWatchdog(client) {
+                console.log('setupWatchdog')
+
+                client.subscribe("watchdog/stats", (msg) => {
+                    try {
+                        const data = JSON.parse(msg);
+
+                        // Optional: log stats in browser
+                        console.log("Stats received:", data);
+
+                        // Create ACK
+                        const ack = {
+                            type: "ack",
+                            seq: data.seq,              // important for matching
+                            t_web: performance.now()    // optional timestamp
+                        };
+
+                        // Send ACK back
+                        client.publish("watchdog/ack", JSON.stringify(ack));
+
+                    } catch (e) {
+                        console.error("Error processing watchdog message:", e);
+                    }
+                });
+
+            }
+            setupWatchdog(client)
             bus.sub_pre("watchdog/stats", (topic, msg) => {
 
                 // --- 1. RSSI ---

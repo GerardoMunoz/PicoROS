@@ -57,8 +57,8 @@ class TCPServer:
 
             elif pkt["action"] == "PUB":
                 ts=None
-                if "timestamp" in pkt:
-                    ts=pkt["timestamp"]
+                if "ts_node" in pkt:
+                    ts=pkt["ts_node"]
                 #print('PUB1',ts,pkt.keys())
                 await self.pubsub.publish(pkt["topic"], pkt["data"], ts , origin=client)
                 #await self.pubsub.publish(pkt["topic"], pkt["data"], origin=client)
@@ -95,8 +95,8 @@ class WSServer:
 
             elif pkt["action"] == "PUB":
                 ts=None
-                if "timestamp" in pkt:
-                    ts=pkt["timestamp"]
+                if "ts_node" in pkt:
+                    ts=pkt["ts_node"]
                 #print('PUB1',ts,pkt.keys())
                 await self.pubsub.publish(pkt["topic"], pkt["data"], ts , origin=client)
 
@@ -109,19 +109,20 @@ class PubSub:
 
     def subscribe(self, client, topic):
         self.subscriptions.setdefault(topic, set()).add(client)
-        print(f"[SUB] {client} -> {topic}",self.subscriptions.keys())
+        print(f"[INFO] [] [SUB {client}] : {topic}",self.subscriptions.keys())
 
     async def publish(self, topic, data, timestamp=None, origin=None):
         msg = json.dumps({
             "action": "PUB",
             "topic": topic,
             "data": data,
-            "timestamp" : timestamp
+            "ts_node" : timestamp,
+            #"ts_broker" : time.time()
         })
 
         clients = self.subscriptions.get(topic, set())
 
-        print(f"[PUB] {topic} -> {len(clients)} clients, ts: {timestamp}")        
+        print(f"[INFO] [{timestamp}] [PUB {topic}] : {len(clients)} clients")        
 
         for c in list(clients):
             if c != origin:
