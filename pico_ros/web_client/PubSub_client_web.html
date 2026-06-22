@@ -295,9 +295,7 @@
         <!-- ========================================================= -->
         <!-- PANEL 2: ENVÍO DE MENSAJES -->
         <!-- ========================================================= -->
-        <!-- ========================================================= -->
-        <!-- PANEL 2: ENVÍO DE MENSAJES -->
-        <!-- ========================================================= -->
+
         <section class="panel" id="panel-messages">
             <h3>Mensajes</h3>
 
@@ -313,12 +311,11 @@
             <hr>
 
             <label>Tópico (sufijo)</label>
-            <input id="msgTopic" value="RPi/sequence">
+            <input id="msgTopic" value="stick/state">
 
             <label>Payload JSON</label>
             <textarea id="msgPayload">{
-  "action": "execute_now",
-  "name": "ymca"
+  "angle":1
 }
 </textarea>
 
@@ -847,44 +844,50 @@
                WATCHDOG NETWORK STATS
             ============================================================ */
 
+            class JitterRFC {
+                constructor() {
+                    this.prev = null;
+                    this.jitter = 0;
+                    this.alpha = 1 / 16;
+                    //this.latency
+                }
+
+                addSample(latency) {
+                    //this.latency=latency
+                    if (this.prev !== null) {
+                        const diff = Math.abs(latency - this.prev);
+                        this.jitter += this.alpha * (diff - this.jitter);
+                    }
+                    this.prev = latency;
+                }
+
+                getJitter() {
+                    return this.jitter;
+                }
+
+            }
+            const jitter = new JitterRFC();
+
+
+
             let lastSeq = null;
             let received = 0;
             let lost = 0;
 
             let lastLatency = null;
-            let jitter = 0;
+            //let jitter = 0;
 
             // Moving averages
             let latencyAvg = 0;
             let alpha = 0.2;
+            bus.sub_pre("watchdog/ack", (topic, msg) => {
 
-            function setupWatchdog(client) {
-                console.log('setupWatchdog')
+                console.log('Sub watchdog/ack', msg);
+                lastLatency = msg.ack_ts - msg.sent_ts
+                jitter.addSample(lastLatency);
 
-                client.subscribe("watchdog/stats", (msg) => {
-                    try {
-                        const data = JSON.parse(msg);
+            });
 
-                        // Optional: log stats in browser
-                        console.log("Stats received:", data);
-
-                        // Create ACK
-                        const ack = {
-                            type: "ack",
-                            seq: data.seq,              // important for matching
-                            t_web: performance.now()    // optional timestamp
-                        };
-
-                        // Send ACK back
-                        client.publish("watchdog/ack", JSON.stringify(ack));
-
-                    } catch (e) {
-                        console.error("Error processing watchdog message:", e);
-                    }
-                });
-
-            }
-            setupWatchdog(client)
             bus.sub_pre("watchdog/stats", (topic, msg) => {
 
                 // --- 1. RSSI ---
@@ -910,29 +913,52 @@
                 }
 
                 // --- 3. LATENCY ---
-                if ("sent_ts" in msg && "ack_ts" in msg) {
-                    const latency = msg.ack_ts - msg.sent_ts;
+                // if ("sent_ts" in msg && "ack_ts" in msg) {
+                //     const latency = msg.ack_ts - msg.sent_ts;
 
-                    // moving average
-                    latencyAvg = alpha * latency + (1 - alpha) * latencyAvg;
+                //     // moving average
+                //     latencyAvg = alpha * latency + (1 - alpha) * latencyAvg;
 
-                    document.getElementById("latency").textContent =
-                        latencyAvg.toFixed(1);
+                document.getElementById("latency").textContent =
+                    lastLatency;
+                //}
+
+                // // --- 4. JITTER ---
+                // if ("sent_ts" in msg && "ack_ts" in msg) {
+                //     const latency = msg.ack_ts - msg.sent_ts;
+
+                //     if (lastLatency !== null) {
+                //         jitter = Math.abs(latency - lastLatency);
+                //     }
+
+                //     lastLatency = latency;
+
+                document.getElementById("jitter").textContent =
+                    jitter.getJitter();
+                // }
+
+                /// respond
+                try {
+                    //console.log("Watchdog stats received:", msg);
+
+                    const data = msg;
+                    console.log('watchdog/stats ', data)
+
+                    // Build received message
+                    const received = {
+                        "ack_ts": msg["sent_ts"],
+                        //type: "received",
+                        //seq: data.seq,                 // keep sequence for tracking
+                        //t_web: performance.now()       // timestamp at browser
+                    };
+
+                    // Publish confirmation
+                    bus.pub_pre("watchdog/received", received);// JSON.stringify(received)
+
+                } catch (e) {
+                    console.error("Error in watchdog/stats handler:", e);
                 }
 
-                // --- 4. JITTER ---
-                if ("sent_ts" in msg && "ack_ts" in msg) {
-                    const latency = msg.ack_ts - msg.sent_ts;
-
-                    if (lastLatency !== null) {
-                        jitter = Math.abs(latency - lastLatency);
-                    }
-
-                    lastLatency = latency;
-
-                    document.getElementById("jitter").textContent =
-                        jitter.toFixed(1);
-                }
 
             });
         </script>
