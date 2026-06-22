@@ -94,6 +94,11 @@ import math
 import sys
 import time
 
+def time_float():
+        t_ns_str = str(time.time_ns())
+        return t_ns_str[:-9]+"."+t_ns_str[-9:-3]
+
+
 class RingBuffer:
     def __init__(self, size=10, unit="us"):
         self.size = size
@@ -318,6 +323,7 @@ class SocketClient(Task):
                     return False
                 total += sent
             except OSError:
+                print("⚠️ Socket send except")
                 # Socket not ready → exit and retry later
                 return False
         return True
@@ -385,6 +391,8 @@ class SocketClient(Task):
 # =========================================================
 # PUBSUB CLIENT
 # =========================================================
+
+
 class Node:
     def __init__(self, socket_client, prefix='UDFJC/emb1/robot0/'):
         self.sock = socket_client
@@ -394,7 +402,7 @@ class Node:
         self.subscriptions = {}  # topic -> set(callback)
 
     def publish(self, topic, data):
-        ts=time.time()
+        ts=time_float()
         self.broker_publish(topic,data,ts=ts)
         self.local_publish(topic,data,ts=ts)
        
@@ -405,7 +413,7 @@ class Node:
             "action": "PUB",
             "topic": self.prefix+topic,
             "data": data,
-            "timestamp":ts
+            "ts_node":ts
         }
 
         self.sock.send_json(pkt)
@@ -414,7 +422,7 @@ class Node:
     def local_publish(self,topic,data,ts=None):   
         callbacks = self.subscriptions.get(topic, set())
 
-        print(f"[PUB] {topic} -> {len(callbacks)} callbacks, ts: {ts}")
+        print(f"[INFO] [{ts}] [PUB {topic}] : {len(callbacks)} callbacks")
 
         for c in list(callbacks):
             #if c != origin:
@@ -436,7 +444,7 @@ class Node:
             "topic": self.prefix+topic,
         }
         self.sock.send_json(pkt)
-        print(f"[SUB] {callback} -> {topic}")
+        print(f"[INFO] [] [SUB {callback}] : [{topic}]")
 
     def handle_pub(self, msg):
         topic = msg['topic']
@@ -479,23 +487,39 @@ class Node:
 
 
 class WatchdogTask(Task):
-    def __init__(self, scheduler, pubsub, period_ms=1000):
+    def __init__(self, scheduler, pubsub, wifi, period_ms=1000):
         super().__init__(scheduler, period_ms)
         self.pubsub = pubsub
+        self.wifi=wifi
+        pubsub.subscribe("watchdog/received",self.handle_message_received )
 
     def update(self):
-            data={
+            data={  "sent_ts":  time_float(),
                     "mem_free": gc.mem_free(),
                     "mem_used": gc.mem_alloc(),
-                    
+                    "rssi":self.wifi.wlan.status('rssi'),
+                    "seq": 120,
+                    #"ack_ts": 12345678,
+                    #"sent_ts": 12345600
                 }|self.scheduler.stats()
-            print('WatchdogTask',data)
+            #print('WatchdogTask',data)
             self.pubsub.publish(
                 "watchdog/stats",
                 data
             )
             #prnt("🐶 Watchdog")
             
+    def handle_message_received(self, msg):
+        print('WatchdogTask.handle_message_received',type(msg),msg.get("ack_ts",None))
+        
+        self.pubsub.publish(
+            "watchdog/ack",
+            {
+                "ack_ts": time_float(),
+                "sent_ts":  msg.get("ack_ts",None),
+            }
+        )
+        
 
 class CameraSimulator(Task):
     # Upgrade to the real ov7670 camera, it could read the data on the other `_thread`
@@ -590,7 +614,7 @@ class CameraSimulator(Task):
     def _generate_frame(self,control_line="time"):
         if control_line=="angle":
             t = self.angle_to_pixel(self.car_angle, self.line_angle, self.WIDTH, fov=60)
-            print('Camera._generate_frame.angle',t,self.car_angle, self.line_angle)
+            #print('Camera._generate_frame.angle',t,self.car_angle, self.line_angle)
         else:
             t = int(time.time()*4) % self.WIDTH
         #prnt('_generate_frame.t',t,control_line)
@@ -803,10 +827,10 @@ class MainApp:
         self.pubsub = Node(self.socket_client, prefix='UDFJC/emb1/robot0/')
         print('Node')
 
-        WatchdogTask(scheduler=self.scheduler, pubsub=self.pubsub)
+        WatchdogTask(scheduler=self.scheduler, pubsub=self.pubsub, wifi=self.wifi)
         print('WatchdogTask')
         FollowLineControl(pubsub=self.pubsub)
-        CameraSimulator(scheduler=self.scheduler, pubsub=self.pubsub, width=40, height=30, period_ms=500)
+        CameraSimulator(scheduler=self.scheduler, pubsub=self.pubsub, width=40, height=30, period_ms=1000)
         print('CameraPublisherTask')
         #Arm(scheduler=self.scheduler, pubsub=self.pubsub,joint_state={"shoulder": 10, "elbow": 20, "wrist": 30})
         #print('Arm')
