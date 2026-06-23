@@ -606,6 +606,7 @@ class CameraSimulator(Task):
             self.pubsub.publish(
                 "camera/frame",
                 {
+                    "first_ts":  time_float(),
                     "w": self.WIDTH,
                     "h": self.HEIGHT,
                     "frame": frame_b64
