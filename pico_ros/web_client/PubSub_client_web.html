@@ -832,6 +832,8 @@
         <!-- ========================================================= -->
         <section class="panel" id="panel-network">
             <h3>Network Stats (Watchdog)</h3>
+            <div id="stats_container"></div>
+            <p>--------------</p>
 
             <p>RSSI: <span id="rssi">-</span> dBm</p>
             <p>Packet Loss: <span id="loss">-</span> %</p>
@@ -844,123 +846,296 @@
                WATCHDOG NETWORK STATS
             ============================================================ */
 
+            // class JitterRFC {
+            //     constructor(topic) {
+            //         this.prev = null;
+            //         this.jitter = 0;
+            //         this.alpha = 1 / 16;
+            //         this.lastLatency = null;
+            //         this.topic = topic
+            //         bus.sub_pre("node/send_second_ts", (_topic, msg) => {
+            //             console.log('JitterRFC', topic, msg);
+            //             this.lastLatency = msg.second_ts - msg.first_ts
+            //             this.addSample(lastLatency);
+            //         });
+
+
+            //         // bus.sub_pre("watchdog/ack", (topic, msg) => {
+
+            //         //     console.log('Sub watchdog/ack', msg);
+            //         //     lastLatency = msg.ack_ts - msg.sent_ts
+            //         //     jitter.addSample(lastLatency);
+
+            //         // });
+
+            //         bus.sub_pre(topic, (_topic, msg) => {
+
+            //             // --- 1. RSSI ---
+            //             if ("rssi" in msg) {
+            //                 document.getElementById("rssi").textContent = msg.rssi;
+            //             }
+
+            //             // --- 2. PACKET LOSS ---
+            //             if ("seq" in msg) {
+            //                 if (lastSeq !== null) {
+            //                     const diff = msg.seq - lastSeq;
+
+            //                     if (diff > 1) {
+            //                         lost += (diff - 1);
+            //                     }
+            //                 }
+
+            //                 received += 1;
+            //                 lastSeq = msg.seq;
+
+            //                 const lossRate = (lost / (received + lost)) * 100;
+            //                 document.getElementById("loss").textContent = lossRate.toFixed(2);
+            //             }
+
+            //             // --- 3. LATENCY ---
+            //             // if ("sent_ts" in msg && "ack_ts" in msg) {
+            //             //     const latency = msg.ack_ts - msg.sent_ts;
+
+            //             //     // moving average
+            //             //     latencyAvg = alpha * latency + (1 - alpha) * latencyAvg;
+
+            //             document.getElementById("latency").textContent =
+            //                 lastLatency;
+            //             //}
+
+            //             // // --- 4. JITTER ---
+            //             // if ("sent_ts" in msg && "ack_ts" in msg) {
+            //             //     const latency = msg.ack_ts - msg.sent_ts;
+
+            //             //     if (lastLatency !== null) {
+            //             //         jitter = Math.abs(latency - lastLatency);
+            //             //     }
+
+            //             //     lastLatency = latency;
+
+            //             document.getElementById("jitter").textContent =
+            //                 jitter.getJitter();
+            //             // }
+
+            //             /// respond
+            //             try {
+            //                 //console.log("Watchdog stats received:", msg);
+
+            //                 const data = msg;
+            //                 console.log('watchdog/stats ', data)
+
+            //                 // Build received message
+            //                 const received = {
+            //                     "ack_ts": msg["sent_ts"],
+            //                     //type: "received",
+            //                     //seq: data.seq,                 // keep sequence for tracking
+            //                     //t_web: performance.now()       // timestamp at browser
+            //                 };
+
+            //                 // Publish confirmation
+            //                 bus.pub_pre("node/get_second_ts", received);// JSON.stringify(received)
+
+            //             } catch (e) {
+            //                 console.error("Error in watchdog/stats handler:", e);
+            //             }
+            //         });
+            //     }
+
+            //     addSample(latency) {
+            //         //this.latency=latency
+            //         if (this.prev !== null) {
+            //             const diff = Math.abs(latency - this.prev);
+            //             this.jitter += this.alpha * (diff - this.jitter);
+            //         }
+            //         this.prev = latency;
+            //     }
+
+            //     getJitter() {
+            //         return this.jitter;
+            //     }
+
+            // }
+
             class JitterRFC {
-                constructor() {
+                constructor(bus, topic, containerId) {
+                    this.bus = bus;
+                    this.topic = topic;
+
                     this.prev = null;
                     this.jitter = 0;
                     this.alpha = 1 / 16;
-                    //this.latency
+
+                    this.pending = {}; // seq → first_ts
+
+                    // Create UI
+                    this.createUI(containerId);
+
+                    // Subscribe to topic
+                    this.bus.sub_pre(this.topic, (t, msg) => this.onMessage(msg));
+
+                    // Subscribe to response from Pico
+                    this.bus.sub_pre("node/send_second_ts", (t, msg) => this.onSecondTs(msg));
                 }
 
-                addSample(latency) {
-                    //this.latency=latency
+                createUI(containerId) {
+                    const container = document.getElementById(containerId);
+
+                    this.el = document.createElement("div");
+                    this.el.innerHTML = `
+            <h4>${this.topic}</h4>
+            <div>Latency: <span id="${this.topic}_lat">-</span> ms</div>
+            <div>Jitter: <span id="${this.topic}_jit">-</span> ms</div>
+        `;
+
+                    container.appendChild(this.el);
+                }
+
+                onMessage(msg) {
+                    let data = (typeof msg === "string") ? JSON.parse(msg) : msg;
+
+                    const first_ts = data.first_ts;
+                    const seq = data.seq;
+
+                    if (first_ts === undefined || seq === undefined) return;
+
+                    // Save first timestamp
+                    this.pending[seq] = first_ts;
+
+                    // Request second timestamp from Pico
+                    this.bus.pub_pre("node/get_second_ts", JSON.stringify({
+                        seq: seq,
+                        first_ts: first_ts,
+                        topic: this.topic   // IMPORTANT for routing
+                    }));
+                }
+
+                onSecondTs(msg) {
+                    let data = (typeof msg === "string") ? JSON.parse(msg) : msg;
+
+                    // Filter only messages for this topic
+                    if (data.topic !== this.topic) return;
+
+                    const seq = data.first_ts; // matching id
+                    const second_ts = data.second_ts;
+
+                    if (!(seq in this.pending)) return;
+
+                    const first_ts = this.pending[seq];
+                    delete this.pending[seq];
+
+                    // RTT
+                    const rtt = second_ts - first_ts;
+
+                    // Update jitter (RFC)
                     if (this.prev !== null) {
-                        const diff = Math.abs(latency - this.prev);
+                        const diff = Math.abs(rtt - this.prev);
                         this.jitter += this.alpha * (diff - this.jitter);
                     }
-                    this.prev = latency;
-                }
 
-                getJitter() {
-                    return this.jitter;
-                }
+                    this.prev = rtt;
 
+                    // Update UI
+                    document.getElementById(`${this.topic}_lat`).innerText = rtt.toFixed(2);
+                    document.getElementById(`${this.topic}_jit`).innerText = this.jitter.toFixed(2);
+                }
             }
-            const jitter = new JitterRFC();
 
+            const jitter1 = new JitterRFC(bus, "watchdog/stats", "stats_container");
+            const jitter2 = new JitterRFC(bus, "camera/frames", "stats_container");
+            const jitter3 = new JitterRFC(bus, "control/cmd", "stats_container");
 
 
             let lastSeq = null;
             let received = 0;
             let lost = 0;
 
-            let lastLatency = null;
+            //let lastLatency = null;
             //let jitter = 0;
 
             // Moving averages
             let latencyAvg = 0;
             let alpha = 0.2;
-            bus.sub_pre("watchdog/ack", (topic, msg) => {
+            // bus.sub_pre("watchdog/ack", (topic, msg) => {
 
-                console.log('Sub watchdog/ack', msg);
-                lastLatency = msg.ack_ts - msg.sent_ts
-                jitter.addSample(lastLatency);
+            //     console.log('Sub watchdog/ack', msg);
+            //     lastLatency = msg.ack_ts - msg.sent_ts
+            //     jitter.addSample(lastLatency);
 
-            });
+            // });
 
-            bus.sub_pre("watchdog/stats", (topic, msg) => {
+            // bus.sub_pre("watchdog/stats", (topic, msg) => {
 
-                // --- 1. RSSI ---
-                if ("rssi" in msg) {
-                    document.getElementById("rssi").textContent = msg.rssi;
-                }
+            //     // --- 1. RSSI ---
+            //     if ("rssi" in msg) {
+            //         document.getElementById("rssi").textContent = msg.rssi;
+            //     }
 
-                // --- 2. PACKET LOSS ---
-                if ("seq" in msg) {
-                    if (lastSeq !== null) {
-                        const diff = msg.seq - lastSeq;
+            //     // --- 2. PACKET LOSS ---
+            //     if ("seq" in msg) {
+            //         if (lastSeq !== null) {
+            //             const diff = msg.seq - lastSeq;
 
-                        if (diff > 1) {
-                            lost += (diff - 1);
-                        }
-                    }
+            //             if (diff > 1) {
+            //                 lost += (diff - 1);
+            //             }
+            //         }
 
-                    received += 1;
-                    lastSeq = msg.seq;
+            //         received += 1;
+            //         lastSeq = msg.seq;
 
-                    const lossRate = (lost / (received + lost)) * 100;
-                    document.getElementById("loss").textContent = lossRate.toFixed(2);
-                }
+            //         const lossRate = (lost / (received + lost)) * 100;
+            //         document.getElementById("loss").textContent = lossRate.toFixed(2);
+            //     }
 
-                // --- 3. LATENCY ---
-                // if ("sent_ts" in msg && "ack_ts" in msg) {
-                //     const latency = msg.ack_ts - msg.sent_ts;
+            //     // --- 3. LATENCY ---
+            //     // if ("sent_ts" in msg && "ack_ts" in msg) {
+            //     //     const latency = msg.ack_ts - msg.sent_ts;
 
-                //     // moving average
-                //     latencyAvg = alpha * latency + (1 - alpha) * latencyAvg;
+            //     //     // moving average
+            //     //     latencyAvg = alpha * latency + (1 - alpha) * latencyAvg;
 
-                document.getElementById("latency").textContent =
-                    lastLatency;
-                //}
+            //     document.getElementById("latency").textContent =
+            //         lastLatency;
+            //     //}
 
-                // // --- 4. JITTER ---
-                // if ("sent_ts" in msg && "ack_ts" in msg) {
-                //     const latency = msg.ack_ts - msg.sent_ts;
+            //     // // --- 4. JITTER ---
+            //     // if ("sent_ts" in msg && "ack_ts" in msg) {
+            //     //     const latency = msg.ack_ts - msg.sent_ts;
 
-                //     if (lastLatency !== null) {
-                //         jitter = Math.abs(latency - lastLatency);
-                //     }
+            //     //     if (lastLatency !== null) {
+            //     //         jitter = Math.abs(latency - lastLatency);
+            //     //     }
 
-                //     lastLatency = latency;
+            //     //     lastLatency = latency;
 
-                document.getElementById("jitter").textContent =
-                    jitter.getJitter();
-                // }
+            //     document.getElementById("jitter").textContent =
+            //         jitter.getJitter();
+            //     // }
 
-                /// respond
-                try {
-                    //console.log("Watchdog stats received:", msg);
+            //     /// respond
+            //     try {
+            //         //console.log("Watchdog stats received:", msg);
 
-                    const data = msg;
-                    console.log('watchdog/stats ', data)
+            //         const data = msg;
+            //         console.log('watchdog/stats ', data)
 
-                    // Build received message
-                    const received = {
-                        "ack_ts": msg["sent_ts"],
-                        //type: "received",
-                        //seq: data.seq,                 // keep sequence for tracking
-                        //t_web: performance.now()       // timestamp at browser
-                    };
+            //         // Build received message
+            //         const received = {
+            //             "ack_ts": msg["sent_ts"],
+            //             //type: "received",
+            //             //seq: data.seq,                 // keep sequence for tracking
+            //             //t_web: performance.now()       // timestamp at browser
+            //         };
 
-                    // Publish confirmation
-                    bus.pub_pre("watchdog/received", received);// JSON.stringify(received)
+            //         // Publish confirmation
+            //         bus.pub_pre("watchdog/received", received);// JSON.stringify(received)
 
-                } catch (e) {
-                    console.error("Error in watchdog/stats handler:", e);
-                }
+            //     } catch (e) {
+            //         console.error("Error in watchdog/stats handler:", e);
+            //     }
 
 
-            });
+            // });
         </script>
     </div>
 
