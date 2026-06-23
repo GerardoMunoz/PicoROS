@@ -994,34 +994,40 @@
                     let data = (typeof msg === "string") ? JSON.parse(msg) : msg;
 
                     const first_ts = data.first_ts;
-                    const seq = data.seq;
+                    //const seq = data.seq;
 
-                    if (first_ts === undefined || seq === undefined) return;
+                    //if (first_ts === undefined || seq === undefined) return;
+                    if (first_ts === undefined ) return;
 
                     // Save first timestamp
-                    this.pending[seq] = first_ts;
+                    //this.pending[seq] = first_ts;
 
                     // Request second timestamp from Pico
                     this.bus.pub_pre("node/get_second_ts", JSON.stringify({
-                        seq: seq,
+                        //seq: seq,
                         first_ts: first_ts,
                         topic: this.topic   // IMPORTANT for routing
                     }));
                 }
 
                 onSecondTs(msg) {
+                    console.log('onSecondTs0',msg)
                     let data = (typeof msg === "string") ? JSON.parse(msg) : msg;
+                    console.log('onSecondTs1',data.topic, this.topic)
 
                     // Filter only messages for this topic
                     if (data.topic !== this.topic) return;
+                    console.log('onSecondTs2')
 
-                    const seq = data.first_ts; // matching id
+                    //const seq = data.first_ts; // matching id
                     const second_ts = data.second_ts;
+                    const first_ts = data.first_ts;
 
-                    if (!(seq in this.pending)) return;
+                    //if (!(seq in this.pending)) return;
+                    console.log('onSecondTs3')
 
-                    const first_ts = this.pending[seq];
-                    delete this.pending[seq];
+                    //const first_ts = this.pending[seq];
+                    //delete this.pending[seq];
 
                     // RTT
                     const rtt = second_ts - first_ts;
@@ -1033,16 +1039,16 @@
                     }
 
                     this.prev = rtt;
-
+                    console.log('onSecondTs4',rtt.toFixed(2),this.jitter.toFixed(2))
                     // Update UI
-                    document.getElementById(`${this.topic}_lat`).innerText = rtt.toFixed(2);
-                    document.getElementById(`${this.topic}_jit`).innerText = this.jitter.toFixed(2);
+                    document.getElementById(`${this.topic}_lat`).innerText = rtt.toFixed(3);
+                    document.getElementById(`${this.topic}_jit`).innerText = this.jitter.toFixed(5);
                 }
             }
 
             const jitter1 = new JitterRFC(bus, "watchdog/stats", "stats_container");
             const jitter2 = new JitterRFC(bus, "camera/frames", "stats_container");
-            const jitter3 = new JitterRFC(bus, "control/cmd", "stats_container");
+            //const jitter3 = new JitterRFC(bus, "control/cmd", "stats_container");
 
 
             let lastSeq = null;
