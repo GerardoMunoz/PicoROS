@@ -96,7 +96,7 @@
             <h3>Conexión WebSocket</h3>
 
             <label>IP del Broker:</label>
-            <input id="ip" value="192.168.1.17">
+            <input id="ip" value="10.52.64.1">
 
             <label>Puerto:</label>
             <input id="port" value="5052">
@@ -836,9 +836,9 @@
             <p>--------------</p>
 
             <p>RSSI: <span id="rssi">-</span> dBm</p>
-            <p>Packet Loss: <span id="loss">-</span> %</p>
+            <!-- <p>Packet Loss: <span id="loss">-</span> %</p>
             <p>Latency: <span id="latency">-</span> ms</p>
-            <p>Jitter: <span id="jitter">-</span> ms</p>
+            <p>Jitter: <span id="jitter">-</span> ms</p> -->
         </section>
 
         <script>
@@ -965,7 +965,8 @@
                     this.jitter = 0;
                     this.alpha = 1 / 16;
 
-                    this.pending = {}; // seq → first_ts
+                    //this.pending = {}; // seq → first_ts
+                    this.received=0
 
                     // Create UI
                     this.createUI(containerId);
@@ -983,6 +984,7 @@
                     this.el = document.createElement("div");
                     this.el.innerHTML = `
             <h4>${this.topic}</h4>
+            <div>Send-Received: <span id="${this.topic}_seq">-</span></div>
             <div>Latency: <span id="${this.topic}_lat">-</span> ms</div>
             <div>Jitter: <span id="${this.topic}_jit">-</span> ms</div>
         `;
@@ -996,8 +998,42 @@
                     const first_ts = data.first_ts;
                     //const seq = data.seq;
 
+
+                    // --- 1. RSSI ---
+                    if ("rssi" in msg) {
+                        document.getElementById("rssi").textContent = msg.rssi;
+                    }
+
+                    // --- 2. PACKET LOSS ---
+                    if (msg.sended<this.received){
+                        this.received = 0;
+                    }
+                    else{
+                        this.received += 1;
+                    }
+                    
+                    document.getElementById(`${this.topic}_seq`).innerText = String(msg.sended)+'-'+String(this.received)+'='+String(msg.sended-this.received);
+                    // if ("seq" in msg) {
+                    //     if (lastSeq !== null) {
+                    //         const diff = msg.seq - lastSeq;
+
+                    //         if (diff > 1) {
+                    //             lost += (diff - 1);
+                    //         }
+                    //     }
+
+                    //     this.received += 1;
+                    //     lastSeq = msg.seq;
+
+                    //     const lossRate = (lost / (received + lost)) * 100;
+                    //     document.getElementById("loss").textContent = lossRate.toFixed(2);
+                    // }
+
+
+
+
                     //if (first_ts === undefined || seq === undefined) return;
-                    if (first_ts === undefined ) return;
+                    if (first_ts === undefined) return;
 
                     // Save first timestamp
                     //this.pending[seq] = first_ts;
@@ -1011,9 +1047,9 @@
                 }
 
                 onSecondTs(msg) {
-                    console.log('onSecondTs0',msg)
+                    console.log('onSecondTs0', msg)
                     let data = (typeof msg === "string") ? JSON.parse(msg) : msg;
-                    console.log('onSecondTs1',data.topic, this.topic)
+                    console.log('onSecondTs1', data.topic, this.topic)
 
                     // Filter only messages for this topic
                     if (data.topic !== this.topic) return;
@@ -1039,7 +1075,7 @@
                     }
 
                     this.prev = rtt;
-                    console.log('onSecondTs4',rtt.toFixed(2),this.jitter.toFixed(2))
+                    console.log('onSecondTs4', rtt.toFixed(2), this.jitter.toFixed(2))
                     // Update UI
                     document.getElementById(`${this.topic}_lat`).innerText = rtt.toFixed(3);
                     document.getElementById(`${this.topic}_jit`).innerText = this.jitter.toFixed(5);
@@ -1047,20 +1083,20 @@
             }
 
             const jitter1 = new JitterRFC(bus, "watchdog/stats", "stats_container");
-            const jitter2 = new JitterRFC(bus, "camera/frames", "stats_container");
+            const jitter2 = new JitterRFC(bus, "camera/frame", "stats_container");
             //const jitter3 = new JitterRFC(bus, "control/cmd", "stats_container");
 
 
-            let lastSeq = null;
-            let received = 0;
-            let lost = 0;
+            // let lastSeq = null;
+            // let received = 0;
+            // let lost = 0;
 
-            //let lastLatency = null;
-            //let jitter = 0;
+            // //let lastLatency = null;
+            // //let jitter = 0;
 
-            // Moving averages
-            let latencyAvg = 0;
-            let alpha = 0.2;
+            // // Moving averages
+            // let latencyAvg = 0;
+            // let alpha = 0.2;
             // bus.sub_pre("watchdog/ack", (topic, msg) => {
 
             //     console.log('Sub watchdog/ack', msg);
