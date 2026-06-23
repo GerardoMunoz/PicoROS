@@ -504,14 +504,16 @@ class WatchdogTask(Task):
         super().__init__(scheduler, period_ms)
         self.pubsub = pubsub
         self.wifi=wifi
+        self.sended=0
         #pubsub.subscribe("watchdog/received",self.handle_message_received )
 
     def update(self):
+            self.sended+=1
             data={  "first_ts":  time_float(),
                     "mem_free": gc.mem_free(),
                     "mem_used": gc.mem_alloc(),
                     "rssi":self.wifi.wlan.status('rssi'),
-                    "seq": 120,
+                    "sended": self.sended,
                     #"ack_ts": 12345678,
                     #"sent_ts": 12345600
                 }|self.scheduler.stats()
@@ -520,6 +522,7 @@ class WatchdogTask(Task):
                 "watchdog/stats",
                 data
             )
+            
             #prnt("🐶 Watchdog")
             
 #     def handle_message_received(self, msg):
@@ -548,6 +551,7 @@ class CameraSimulator(Task):
         self.line_angle=60
         pubsub.subscribe("car/state",self.handle_message_car )
         pubsub.subscribe("stick/state",self.handle_message_line )
+        self.sended=0
 
 #        self.last = 0
 #        self.interval = 2
@@ -598,6 +602,7 @@ class CameraSimulator(Task):
 
         #if now - self.last > self.interval:
 #            gc.collect()
+            self.sended+=1
 
             frame = self._generate_frame(control_line="angle")
 #            frame_b64 = ubinascii.b2a_base64(frame).decode().strip()
@@ -607,6 +612,7 @@ class CameraSimulator(Task):
                 "camera/frame",
                 {
                     "first_ts":  time_float(),
+                    "sended": self.sended,
                     "w": self.WIDTH,
                     "h": self.HEIGHT,
                     "frame": frame_b64
@@ -832,10 +838,10 @@ class MainApp:
 
         self.scheduler = Scheduler()
         print('Scheduler')
-        self.wifi = WiFiManager("PEREZ") # Ejemplo  Change to your WiFi
+        self.wifi = WiFiManager("Ejemplo") # Ejemplo  Change to your WiFi
         #self.wifi.connect()
         print('WiFiManager')
-        self.socket_client = SocketClient(host="192.168.1.17", port=5051,scheduler=self.scheduler) #192.168.1.100  # Change to the Broker IP
+        self.socket_client = SocketClient(host="10.52.64.1", port=5051,scheduler=self.scheduler) #192.168.1.100  # Change to the Broker IP
         #self.socket_client.connect()
         print('SocketClient')
         self.pubsub = Node(self.socket_client, prefix='UDFJC/emb1/robot0/')
