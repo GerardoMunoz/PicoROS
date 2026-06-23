@@ -400,6 +400,7 @@ class Node:
         self.sock.add_action("SUB", self.handle_sub)
         self.prefix=prefix
         self.subscriptions = {}  # topic -> set(callback)
+        self.subscribe("node/get_second_ts",self.handle_get_second_ts )
 
     def publish(self, topic, data):
         ts=time_float()
@@ -461,6 +462,18 @@ class Node:
     def handle_sub(self,msg):
         print('Node.handle_sub ignored',msg)
 
+    def handle_get_second_ts(self, data):
+        msg=json.loads(data)
+        print('WatchdogTask.handle_get_second_ts',type(msg),msg.get("first_ts",None))
+        
+        self.publish(
+            "node/send_second_ts",
+            {
+                "topic": msg.get("topic"), 
+                "first_ts":  msg.get("first_ts"),
+                "second_ts": time_float(),
+            }
+        )
 
 
 
@@ -491,10 +504,10 @@ class WatchdogTask(Task):
         super().__init__(scheduler, period_ms)
         self.pubsub = pubsub
         self.wifi=wifi
-        pubsub.subscribe("watchdog/received",self.handle_message_received )
+        #pubsub.subscribe("watchdog/received",self.handle_message_received )
 
     def update(self):
-            data={  "sent_ts":  time_float(),
+            data={  "first_ts":  time_float(),
                     "mem_free": gc.mem_free(),
                     "mem_used": gc.mem_alloc(),
                     "rssi":self.wifi.wlan.status('rssi'),
@@ -509,16 +522,16 @@ class WatchdogTask(Task):
             )
             #prnt("🐶 Watchdog")
             
-    def handle_message_received(self, msg):
-        print('WatchdogTask.handle_message_received',type(msg),msg.get("ack_ts",None))
-        
-        self.pubsub.publish(
-            "watchdog/ack",
-            {
-                "ack_ts": time_float(),
-                "sent_ts":  msg.get("ack_ts",None),
-            }
-        )
+#     def handle_message_received(self, msg):
+#         print('WatchdogTask.handle_message_received',type(msg),msg.get("ack_ts",None))
+#         
+#         self.pubsub.publish(
+#             "watchdog/ack",
+#             {
+#                 "ack_ts": time_float(),
+#                 "sent_ts":  msg.get("ack_ts",None),
+#             }
+#         )
         
 
 class CameraSimulator(Task):
