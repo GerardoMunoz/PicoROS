@@ -88,7 +88,7 @@
 import network, time, json, gc
 import usocket as socket
 import ubinascii
-from machine import Timer
+from machine import Timer,ADC
 import math
 #import traceback
 import sys
@@ -510,10 +510,11 @@ class WatchdogTask(Task):
     def update(self):
             self.sended+=1
             data={  "first_ts":  time_float(),
-                    "mem_free": gc.mem_free(),
-                    "mem_used": gc.mem_alloc(),
+                    "mem_free_bytes": gc.mem_free(),
+                    "mem_used_bytes": gc.mem_alloc(),
                     "rssi":self.wifi.wlan.status('rssi'),
                     "sended": self.sended,
+                    "temperature_c": f"{27 - (ADC(4).read_u16()* 3.3 / 65535 - 0.706) / 0.001721:.2f}"
                     #"ack_ts": 12345678,
                     #"sent_ts": 12345600
                 }|self.scheduler.stats()
@@ -838,10 +839,10 @@ class MainApp:
 
         self.scheduler = Scheduler()
         print('Scheduler')
-        self.wifi = WiFiManager("Ejemplo") # Ejemplo  Change to your WiFi
+        self.wifi = WiFiManager("PEREZ") # Ejemplo  Change to your WiFi
         #self.wifi.connect()
         print('WiFiManager')
-        self.socket_client = SocketClient(host="10.52.64.1", port=5051,scheduler=self.scheduler) #192.168.1.100  # Change to the Broker IP
+        self.socket_client = SocketClient(host="192.168.1.17", port=5051,scheduler=self.scheduler) #192.168.1.100  # Change to the Broker IP
         #self.socket_client.connect()
         print('SocketClient')
         self.pubsub = Node(self.socket_client, prefix='UDFJC/emb1/robot0/')
