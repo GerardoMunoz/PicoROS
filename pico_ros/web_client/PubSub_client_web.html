@@ -843,7 +843,7 @@
         <th>Class</th>
         <th>Min (us)</th>
         <th>Max (us)</th>
-        <th>Avg (us)</th>
+        <th>CPU use (%)</th>
     </tr>
 </table>
 
@@ -1146,7 +1146,7 @@
 
                             row.cells[1].innerText = value.min;
                             row.cells[2].innerText = value.max;
-                            row.cells[3].innerText = value.avg.toFixed(1);
+                            row.cells[3].innerText = (value.avg/value.period/10).toFixed(1);
                         }
                     }
                 }
