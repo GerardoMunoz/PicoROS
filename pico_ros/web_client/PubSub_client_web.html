@@ -96,7 +96,7 @@
             <h3>Conexión WebSocket</h3>
 
             <label>IP del Broker:</label>
-            <input id="ip" value="10.52.64.1">
+            <input id="ip" value="192.168.1.17">
 
             <label>Puerto:</label>
             <input id="port" value="5052">
@@ -832,10 +832,22 @@
         <!-- ========================================================= -->
         <section class="panel" id="panel-network">
             <h3>Network Stats (Watchdog)</h3>
-            <div id="stats_container"></div>
-            <p>--------------</p>
-
             <p>RSSI: <span id="rssi">-</span> dBm</p>
+            <p>Mem free: <span id="mem_free_bytes">-</span> Bytes</p>
+            <p>Mem used: <span id="mem_used_bytes">-</span> Bytes</p>
+            <p>Temperature: <span id="temperature_c">-</span> °C</p>
+            <div id="stats_container"></div>
+            <!--div id="watchdog_stats_table"></div-->
+<table id="watchdog_stats_table" border="1">
+    <tr>
+        <th>Class</th>
+        <th>Min (us)</th>
+        <th>Max (us)</th>
+        <th>Avg (us)</th>
+    </tr>
+</table>
+
+
             <!-- <p>Packet Loss: <span id="loss">-</span> %</p>
             <p>Latency: <span id="latency">-</span> ms</p>
             <p>Jitter: <span id="jitter">-</span> ms</p> -->
@@ -956,6 +968,8 @@
 
             // }
 
+
+
             class JitterRFC {
                 constructor(bus, topic, containerId) {
                     this.bus = bus;
@@ -966,10 +980,11 @@
                     this.alpha = 1 / 16;
 
                     //this.pending = {}; // seq → first_ts
-                    this.received=0
+                    this.received = 0
 
                     // Create UI
                     this.createUI(containerId);
+                    this.rows = {};
 
                     // Subscribe to topic
                     this.bus.sub_pre(this.topic, (t, msg) => this.onMessage(msg));
@@ -993,26 +1008,45 @@
                 }
 
                 onMessage(msg) {
+
+                    // const data = (typeof msg === "string")
+                    //     ? JSON.parse(msg)
+                    //     : msg;
+
+
+
                     let data = (typeof msg === "string") ? JSON.parse(msg) : msg;
+
+                    this.updateStatsTable(data);
 
                     const first_ts = data.first_ts;
                     //const seq = data.seq;
+                    console.log('onMessage', data)
 
 
-                    // --- 1. RSSI ---
+                    // --- 1. stats ---
                     if ("rssi" in msg) {
                         document.getElementById("rssi").textContent = msg.rssi;
                     }
+                    if ("mem_free_bytes" in msg) {
+                        document.getElementById("mem_free_bytes").textContent = msg.mem_free_bytes;
+                    }
+                    if ("mem_used_bytes" in msg) {
+                        document.getElementById("mem_used_bytes").textContent = msg.mem_used_bytes;
+                    }
+                    if ("temperature_c" in msg) {
+                        document.getElementById("temperature_c").textContent = msg.temperature_c;
+                    }
 
                     // --- 2. PACKET LOSS ---
-                    if (msg.sended<this.received){
+                    if (msg.sended < this.received) {
                         this.received = 0;
                     }
-                    else{
+                    else {
                         this.received += 1;
                     }
-                    
-                    document.getElementById(`${this.topic}_seq`).innerText = String(msg.sended)+'-'+String(this.received)+'='+String(msg.sended-this.received);
+
+                    document.getElementById(`${this.topic}_seq`).innerText = String(msg.sended) + '-' + String(this.received) + '=' + String(msg.sended - this.received);
                     // if ("seq" in msg) {
                     //     if (lastSeq !== null) {
                     //         const diff = msg.seq - lastSeq;
@@ -1047,20 +1081,20 @@
                 }
 
                 onSecondTs(msg) {
-                    console.log('onSecondTs0', msg)
+                    //console.log('onSecondTs0', msg)
                     let data = (typeof msg === "string") ? JSON.parse(msg) : msg;
-                    console.log('onSecondTs1', data.topic, this.topic)
+                    //console.log('onSecondTs1', data.topic, this.topic)
 
                     // Filter only messages for this topic
                     if (data.topic !== this.topic) return;
-                    console.log('onSecondTs2')
+                    //console.log('onSecondTs2')
 
                     //const seq = data.first_ts; // matching id
                     const second_ts = data.second_ts;
                     const first_ts = data.first_ts;
 
                     //if (!(seq in this.pending)) return;
-                    console.log('onSecondTs3')
+                    //console.log('onSecondTs3')
 
                     //const first_ts = this.pending[seq];
                     //delete this.pending[seq];
@@ -1075,11 +1109,88 @@
                     }
 
                     this.prev = rtt;
-                    console.log('onSecondTs4', rtt.toFixed(2), this.jitter.toFixed(2))
+                    //console.log('onSecondTs4', rtt.toFixed(2), this.jitter.toFixed(2))
                     // Update UI
                     document.getElementById(`${this.topic}_lat`).innerText = rtt.toFixed(3);
                     document.getElementById(`${this.topic}_jit`).innerText = this.jitter.toFixed(5);
                 }
+
+
+                updateStatsTable(data) {
+
+                    const table = document.getElementById("watchdog_stats_table");
+
+                    for (const [name, value] of Object.entries(data)) {
+
+                        if (
+                            typeof value === "object" &&
+                            value !== null &&
+                            "min" in value &&
+                            "max" in value &&
+                            "avg" in value
+                        ) {
+
+                            let row = this.rows[name];
+
+                            if (!row) {
+
+                                row = table.insertRow();
+
+                                row.insertCell().innerText = name;
+                                row.insertCell(); // min
+                                row.insertCell(); // max
+                                row.insertCell(); // avg
+
+                                this.rows[name] = row;
+                            }
+
+                            row.cells[1].innerText = value.min;
+                            row.cells[2].innerText = value.max;
+                            row.cells[3].innerText = value.avg.toFixed(1);
+                        }
+                    }
+                }
+
+                //             updateStatsTable(data) {
+
+                //                 const container = document.getElementById("watchdog_stats_table");
+
+                //                 let html = `
+                //     <table border="1" style="border-collapse: collapse;">
+                //         <tr>
+                //             <th>Class</th>
+                //             <th>Min (us)</th>
+                //             <th>Max (us)</th>
+                //             <th>Avg (us)</th>
+                //         </tr>
+                // `;
+
+                //                 for (const [name, value] of Object.entries(data)) {
+
+                //                     if (
+                //                         typeof value === "object" &&
+                //                         value !== null &&
+                //                         "min" in value &&
+                //                         "max" in value &&
+                //                         "avg" in value
+                //                     ) {
+                //                         html += `
+                //             <tr>
+                //                 <td>${name}</td>
+                //                 <td>${value.min}</td>
+                //                 <td>${value.max}</td>
+                //                 <td>${value.avg.toFixed(1)}</td>
+                //             </tr>
+                //         `;
+                //                     }
+                //                 }
+
+                //                 html += "</table>";
+
+                //                 container.innerHTML = html;
+                //             }
+
+
             }
 
             const jitter1 = new JitterRFC(bus, "watchdog/stats", "stats_container");
