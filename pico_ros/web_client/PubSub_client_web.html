@@ -866,8 +866,44 @@
 
         <script>
 
+            let stats_recording = false;
+            let statisticsLog = [];
 
+            document.getElementById("start_recording").onclick = () => {
+                stats_recording = true;
+                statisticsLog = [];
+            };
 
+            document.getElementById("stop_recording").onclick = () => {
+
+                stats_recording = false;
+
+                const now = new Date();
+
+                const filename =
+                    `stats_${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')
+                    }-${String(now.getDate()).padStart(2, '0')
+                    }_${String(now.getHours()).padStart(2, '0')
+                    }-${String(now.getMinutes()).padStart(2, '0')
+                    }-${String(now.getSeconds()).padStart(2, '0')
+                    }.json`;
+
+                const blob = new Blob(
+                    [JSON.stringify(statisticsLog, null, 2)],
+                    { type: "application/json" }
+                );
+
+                const url = URL.createObjectURL(blob);
+
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = filename;
+                a.click();
+
+                URL.revokeObjectURL(url);
+
+                console.log("Saved:", filename);
+            };
 
             class JitterRFC {
                 constructor(bus, topic, containerId) {
@@ -894,27 +930,27 @@
                 }
 
                 createUI(containerId) {
-  const table = document.getElementById("stats_container_table");
+                    const table = document.getElementById("stats_container_table");
 
-    this.networkRow = table.insertRow();
+                    this.networkRow = table.insertRow();
 
-    this.networkRow.insertCell().innerText = this.topic;
-    this.networkRow.insertCell().innerText = "0"; // sended
-    this.networkRow.insertCell().innerText = "0"; // lost
-    this.networkRow.insertCell().innerText = "-"; // latency
-    this.networkRow.insertCell().innerText = "-"; // jitter
+                    this.networkRow.insertCell().innerText = this.topic;
+                    this.networkRow.insertCell().innerText = "0"; // sended
+                    this.networkRow.insertCell().innerText = "0"; // lost
+                    this.networkRow.insertCell().innerText = "-"; // latency
+                    this.networkRow.insertCell().innerText = "-"; // jitter
 
-        //             const container = document.getElementById(containerId);
+                    //             const container = document.getElementById(containerId);
 
-        //             this.el = document.createElement("div");
-        //             this.el.innerHTML = `
-        //     <h4>${this.topic}</h4>
-        //     <div>Send-Received: <span id="${this.topic}_seq">-</span></div>
-        //     <div>Latency: <span id="${this.topic}_lat">-</span> ms</div>
-        //     <div>Jitter: <span id="${this.topic}_jit">-</span> ms</div>
-        // `;
+                    //             this.el = document.createElement("div");
+                    //             this.el.innerHTML = `
+                    //     <h4>${this.topic}</h4>
+                    //     <div>Send-Received: <span id="${this.topic}_seq">-</span></div>
+                    //     <div>Latency: <span id="${this.topic}_lat">-</span> ms</div>
+                    //     <div>Jitter: <span id="${this.topic}_jit">-</span> ms</div>
+                    // `;
 
-        //             container.appendChild(this.el);
+                    //             container.appendChild(this.el);
                 }
 
                 onMessage(msg) {
@@ -926,6 +962,15 @@
 
 
                     let data = (typeof msg === "string") ? JSON.parse(msg) : msg;
+
+                    if (stats_recording) {
+                        statisticsLog.push({
+                            topic: this.topic,
+                            received_ts: performance.now(),
+                            data: structuredClone(data)
+                        });
+                    }
+
 
                     this.updateStatsTable(data);
 
@@ -950,7 +995,7 @@
 
                     // --- 2. PACKET LOSS ---
 
-                    if ((data.sended < this.received)||(this.received==0)) {
+                    if ((data.sended < this.received) || (this.received == 0)) {
                         this.received = data.sended;
                     }
                     else {
@@ -959,7 +1004,7 @@
 
                     //document.getElementById(`${this.topic}_seq`).innerText = String(msg.sended) + '-' + String(this.received) + '=' + String(msg.sended - this.received);
                     const lost = data.sended - this.received;
-                console.log('onMessage',lost, data.sended , this.received,this.row)
+                    console.log('onMessage', lost, data.sended, this.received, this.row)
                     this.networkRow.cells[1].innerText = data.sended; // Sended
                     this.networkRow.cells[2].innerText = lost;       // Lost
 
