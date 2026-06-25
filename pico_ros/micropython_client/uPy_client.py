@@ -209,6 +209,7 @@ class Scheduler:
         for task in self.tasks:
             #print('Scheduler.stats',task)
             stats_dic[task.name]=task.metrics.stats()
+            stats_dic[task.name]['period']=task.period
         return stats_dic    
             
 
