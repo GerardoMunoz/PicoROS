@@ -96,7 +96,7 @@
             <h3>Conexión WebSocket</h3>
 
             <label>IP del Broker:</label>
-            <input id="ip" value="192.168.1.17">
+            <input id="ip" value="192.168.1.100">
 
             <label>Puerto:</label>
             <input id="port" value="5052">
@@ -832,20 +832,31 @@
         <!-- ========================================================= -->
         <section class="panel" id="panel-network">
             <h3>Network Stats (Watchdog)</h3>
+            <button id="start_recording">Start Recording</button>
+            <button id="stop_recording">Stop & Download</button>
             <p>RSSI: <span id="rssi">-</span> dBm</p>
             <p>Mem free: <span id="mem_free_bytes">-</span> Bytes</p>
             <p>Mem used: <span id="mem_used_bytes">-</span> Bytes</p>
             <p>Temperature: <span id="temperature_c">-</span> °C</p>
             <div id="stats_container"></div>
             <!--div id="watchdog_stats_table"></div-->
-<table id="watchdog_stats_table" border="1">
-    <tr>
-        <th>Class</th>
-        <th>Min (us)</th>
-        <th>Max (us)</th>
-        <th>CPU use (%)</th>
-    </tr>
-</table>
+            <table id="stats_container_table" border="1">
+                <tr>
+                    <th>Topic</th>
+                    <th>Send</th>
+                    <th>Lost</th>
+                    <th>Latency</th>
+                    <th>Jitter</th>
+                </tr>
+            </table>
+            <table id="watchdog_stats_table" border="1">
+                <tr>
+                    <th>Object</th>
+                    <th>Min (us)</th>
+                    <th>Max (us)</th>
+                    <th>CPU use (%)</th>
+                </tr>
+            </table>
 
 
             <!-- <p>Packet Loss: <span id="loss">-</span> %</p>
@@ -854,119 +865,7 @@
         </section>
 
         <script>
-            /* ============================================================
-               WATCHDOG NETWORK STATS
-            ============================================================ */
 
-            // class JitterRFC {
-            //     constructor(topic) {
-            //         this.prev = null;
-            //         this.jitter = 0;
-            //         this.alpha = 1 / 16;
-            //         this.lastLatency = null;
-            //         this.topic = topic
-            //         bus.sub_pre("node/send_second_ts", (_topic, msg) => {
-            //             console.log('JitterRFC', topic, msg);
-            //             this.lastLatency = msg.second_ts - msg.first_ts
-            //             this.addSample(lastLatency);
-            //         });
-
-
-            //         // bus.sub_pre("watchdog/ack", (topic, msg) => {
-
-            //         //     console.log('Sub watchdog/ack', msg);
-            //         //     lastLatency = msg.ack_ts - msg.sent_ts
-            //         //     jitter.addSample(lastLatency);
-
-            //         // });
-
-            //         bus.sub_pre(topic, (_topic, msg) => {
-
-            //             // --- 1. RSSI ---
-            //             if ("rssi" in msg) {
-            //                 document.getElementById("rssi").textContent = msg.rssi;
-            //             }
-
-            //             // --- 2. PACKET LOSS ---
-            //             if ("seq" in msg) {
-            //                 if (lastSeq !== null) {
-            //                     const diff = msg.seq - lastSeq;
-
-            //                     if (diff > 1) {
-            //                         lost += (diff - 1);
-            //                     }
-            //                 }
-
-            //                 received += 1;
-            //                 lastSeq = msg.seq;
-
-            //                 const lossRate = (lost / (received + lost)) * 100;
-            //                 document.getElementById("loss").textContent = lossRate.toFixed(2);
-            //             }
-
-            //             // --- 3. LATENCY ---
-            //             // if ("sent_ts" in msg && "ack_ts" in msg) {
-            //             //     const latency = msg.ack_ts - msg.sent_ts;
-
-            //             //     // moving average
-            //             //     latencyAvg = alpha * latency + (1 - alpha) * latencyAvg;
-
-            //             document.getElementById("latency").textContent =
-            //                 lastLatency;
-            //             //}
-
-            //             // // --- 4. JITTER ---
-            //             // if ("sent_ts" in msg && "ack_ts" in msg) {
-            //             //     const latency = msg.ack_ts - msg.sent_ts;
-
-            //             //     if (lastLatency !== null) {
-            //             //         jitter = Math.abs(latency - lastLatency);
-            //             //     }
-
-            //             //     lastLatency = latency;
-
-            //             document.getElementById("jitter").textContent =
-            //                 jitter.getJitter();
-            //             // }
-
-            //             /// respond
-            //             try {
-            //                 //console.log("Watchdog stats received:", msg);
-
-            //                 const data = msg;
-            //                 console.log('watchdog/stats ', data)
-
-            //                 // Build received message
-            //                 const received = {
-            //                     "ack_ts": msg["sent_ts"],
-            //                     //type: "received",
-            //                     //seq: data.seq,                 // keep sequence for tracking
-            //                     //t_web: performance.now()       // timestamp at browser
-            //                 };
-
-            //                 // Publish confirmation
-            //                 bus.pub_pre("node/get_second_ts", received);// JSON.stringify(received)
-
-            //             } catch (e) {
-            //                 console.error("Error in watchdog/stats handler:", e);
-            //             }
-            //         });
-            //     }
-
-            //     addSample(latency) {
-            //         //this.latency=latency
-            //         if (this.prev !== null) {
-            //             const diff = Math.abs(latency - this.prev);
-            //             this.jitter += this.alpha * (diff - this.jitter);
-            //         }
-            //         this.prev = latency;
-            //     }
-
-            //     getJitter() {
-            //         return this.jitter;
-            //     }
-
-            // }
 
 
 
@@ -974,6 +873,7 @@
                 constructor(bus, topic, containerId) {
                     this.bus = bus;
                     this.topic = topic;
+                    this.networkRow = null;
 
                     this.prev = null;
                     this.jitter = 0;
@@ -994,17 +894,27 @@
                 }
 
                 createUI(containerId) {
-                    const container = document.getElementById(containerId);
+  const table = document.getElementById("stats_container_table");
 
-                    this.el = document.createElement("div");
-                    this.el.innerHTML = `
-            <h4>${this.topic}</h4>
-            <div>Send-Received: <span id="${this.topic}_seq">-</span></div>
-            <div>Latency: <span id="${this.topic}_lat">-</span> ms</div>
-            <div>Jitter: <span id="${this.topic}_jit">-</span> ms</div>
-        `;
+    this.networkRow = table.insertRow();
 
-                    container.appendChild(this.el);
+    this.networkRow.insertCell().innerText = this.topic;
+    this.networkRow.insertCell().innerText = "0"; // sended
+    this.networkRow.insertCell().innerText = "0"; // lost
+    this.networkRow.insertCell().innerText = "-"; // latency
+    this.networkRow.insertCell().innerText = "-"; // jitter
+
+        //             const container = document.getElementById(containerId);
+
+        //             this.el = document.createElement("div");
+        //             this.el.innerHTML = `
+        //     <h4>${this.topic}</h4>
+        //     <div>Send-Received: <span id="${this.topic}_seq">-</span></div>
+        //     <div>Latency: <span id="${this.topic}_lat">-</span> ms</div>
+        //     <div>Jitter: <span id="${this.topic}_jit">-</span> ms</div>
+        // `;
+
+        //             container.appendChild(this.el);
                 }
 
                 onMessage(msg) {
@@ -1021,48 +931,37 @@
 
                     const first_ts = data.first_ts;
                     //const seq = data.seq;
-                    console.log('onMessage', data)
+                    //console.log('onMessage', data)
 
 
                     // --- 1. stats ---
-                    if ("rssi" in msg) {
-                        document.getElementById("rssi").textContent = msg.rssi;
+                    if ("rssi" in data) {
+                        document.getElementById("rssi").textContent = data.rssi;
                     }
-                    if ("mem_free_bytes" in msg) {
-                        document.getElementById("mem_free_bytes").textContent = msg.mem_free_bytes;
+                    if ("mem_free_bytes" in data) {
+                        document.getElementById("mem_free_bytes").textContent = data.mem_free_bytes;
                     }
-                    if ("mem_used_bytes" in msg) {
-                        document.getElementById("mem_used_bytes").textContent = msg.mem_used_bytes;
+                    if ("mem_used_bytes" in data) {
+                        document.getElementById("mem_used_bytes").textContent = data.mem_used_bytes;
                     }
-                    if ("temperature_c" in msg) {
-                        document.getElementById("temperature_c").textContent = msg.temperature_c;
+                    if ("temperature_c" in data) {
+                        document.getElementById("temperature_c").textContent = data.temperature_c;
                     }
 
                     // --- 2. PACKET LOSS ---
-                    if (msg.sended < this.received) {
-                        this.received = 0;
+
+                    if ((data.sended < this.received)||(this.received==0)) {
+                        this.received = data.sended;
                     }
                     else {
                         this.received += 1;
                     }
 
-                    document.getElementById(`${this.topic}_seq`).innerText = String(msg.sended) + '-' + String(this.received) + '=' + String(msg.sended - this.received);
-                    // if ("seq" in msg) {
-                    //     if (lastSeq !== null) {
-                    //         const diff = msg.seq - lastSeq;
-
-                    //         if (diff > 1) {
-                    //             lost += (diff - 1);
-                    //         }
-                    //     }
-
-                    //     this.received += 1;
-                    //     lastSeq = msg.seq;
-
-                    //     const lossRate = (lost / (received + lost)) * 100;
-                    //     document.getElementById("loss").textContent = lossRate.toFixed(2);
-                    // }
-
+                    //document.getElementById(`${this.topic}_seq`).innerText = String(msg.sended) + '-' + String(this.received) + '=' + String(msg.sended - this.received);
+                    const lost = data.sended - this.received;
+                console.log('onMessage',lost, data.sended , this.received,this.row)
+                    this.networkRow.cells[1].innerText = data.sended; // Sended
+                    this.networkRow.cells[2].innerText = lost;       // Lost
 
 
 
@@ -1111,8 +1010,10 @@
                     this.prev = rtt;
                     //console.log('onSecondTs4', rtt.toFixed(2), this.jitter.toFixed(2))
                     // Update UI
-                    document.getElementById(`${this.topic}_lat`).innerText = rtt.toFixed(3);
-                    document.getElementById(`${this.topic}_jit`).innerText = this.jitter.toFixed(5);
+                    //document.getElementById(`${this.topic}_lat`).innerText = rtt.toFixed(3);
+                    //document.getElementById(`${this.topic}_jit`).innerText = this.jitter.toFixed(5);
+                    this.networkRow.cells[3].innerText = rtt.toFixed(3);
+                    this.networkRow.cells[4].innerText = this.jitter.toFixed(4);
                 }
 
 
@@ -1146,149 +1047,19 @@
 
                             row.cells[1].innerText = value.min;
                             row.cells[2].innerText = value.max;
-                            row.cells[3].innerText = (value.avg/value.period/10).toFixed(1);
+                            row.cells[3].innerText = (value.avg / value.period / 10).toFixed(1);
                         }
                     }
                 }
 
-                //             updateStatsTable(data) {
 
-                //                 const container = document.getElementById("watchdog_stats_table");
-
-                //                 let html = `
-                //     <table border="1" style="border-collapse: collapse;">
-                //         <tr>
-                //             <th>Class</th>
-                //             <th>Min (us)</th>
-                //             <th>Max (us)</th>
-                //             <th>Avg (us)</th>
-                //         </tr>
-                // `;
-
-                //                 for (const [name, value] of Object.entries(data)) {
-
-                //                     if (
-                //                         typeof value === "object" &&
-                //                         value !== null &&
-                //                         "min" in value &&
-                //                         "max" in value &&
-                //                         "avg" in value
-                //                     ) {
-                //                         html += `
-                //             <tr>
-                //                 <td>${name}</td>
-                //                 <td>${value.min}</td>
-                //                 <td>${value.max}</td>
-                //                 <td>${value.avg.toFixed(1)}</td>
-                //             </tr>
-                //         `;
-                //                     }
-                //                 }
-
-                //                 html += "</table>";
-
-                //                 container.innerHTML = html;
-                //             }
 
 
             }
 
             const jitter1 = new JitterRFC(bus, "watchdog/stats", "stats_container");
             const jitter2 = new JitterRFC(bus, "camera/frame", "stats_container");
-            //const jitter3 = new JitterRFC(bus, "control/cmd", "stats_container");
 
-
-            // let lastSeq = null;
-            // let received = 0;
-            // let lost = 0;
-
-            // //let lastLatency = null;
-            // //let jitter = 0;
-
-            // // Moving averages
-            // let latencyAvg = 0;
-            // let alpha = 0.2;
-            // bus.sub_pre("watchdog/ack", (topic, msg) => {
-
-            //     console.log('Sub watchdog/ack', msg);
-            //     lastLatency = msg.ack_ts - msg.sent_ts
-            //     jitter.addSample(lastLatency);
-
-            // });
-
-            // bus.sub_pre("watchdog/stats", (topic, msg) => {
-
-            //     // --- 1. RSSI ---
-            //     if ("rssi" in msg) {
-            //         document.getElementById("rssi").textContent = msg.rssi;
-            //     }
-
-            //     // --- 2. PACKET LOSS ---
-            //     if ("seq" in msg) {
-            //         if (lastSeq !== null) {
-            //             const diff = msg.seq - lastSeq;
-
-            //             if (diff > 1) {
-            //                 lost += (diff - 1);
-            //             }
-            //         }
-
-            //         received += 1;
-            //         lastSeq = msg.seq;
-
-            //         const lossRate = (lost / (received + lost)) * 100;
-            //         document.getElementById("loss").textContent = lossRate.toFixed(2);
-            //     }
-
-            //     // --- 3. LATENCY ---
-            //     // if ("sent_ts" in msg && "ack_ts" in msg) {
-            //     //     const latency = msg.ack_ts - msg.sent_ts;
-
-            //     //     // moving average
-            //     //     latencyAvg = alpha * latency + (1 - alpha) * latencyAvg;
-
-            //     document.getElementById("latency").textContent =
-            //         lastLatency;
-            //     //}
-
-            //     // // --- 4. JITTER ---
-            //     // if ("sent_ts" in msg && "ack_ts" in msg) {
-            //     //     const latency = msg.ack_ts - msg.sent_ts;
-
-            //     //     if (lastLatency !== null) {
-            //     //         jitter = Math.abs(latency - lastLatency);
-            //     //     }
-
-            //     //     lastLatency = latency;
-
-            //     document.getElementById("jitter").textContent =
-            //         jitter.getJitter();
-            //     // }
-
-            //     /// respond
-            //     try {
-            //         //console.log("Watchdog stats received:", msg);
-
-            //         const data = msg;
-            //         console.log('watchdog/stats ', data)
-
-            //         // Build received message
-            //         const received = {
-            //             "ack_ts": msg["sent_ts"],
-            //             //type: "received",
-            //             //seq: data.seq,                 // keep sequence for tracking
-            //             //t_web: performance.now()       // timestamp at browser
-            //         };
-
-            //         // Publish confirmation
-            //         bus.pub_pre("watchdog/received", received);// JSON.stringify(received)
-
-            //     } catch (e) {
-            //         console.error("Error in watchdog/stats handler:", e);
-            //     }
-
-
-            // });
         </script>
     </div>
 
