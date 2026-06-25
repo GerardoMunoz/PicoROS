@@ -840,10 +840,10 @@ class MainApp:
 
         self.scheduler = Scheduler()
         print('Scheduler')
-        self.wifi = WiFiManager("PEREZ") # Ejemplo  Change to your WiFi
+        self.wifi = WiFiManager("Red_UD_LAMIC") # Ejemplo  Change to your WiFi
         #self.wifi.connect()
         print('WiFiManager')
-        self.socket_client = SocketClient(host="192.168.1.17", port=5051,scheduler=self.scheduler) #192.168.1.100  # Change to the Broker IP
+        self.socket_client = SocketClient(host="192.168.1.100", port=5051,scheduler=self.scheduler) #192.168.1.100  # Change to the Broker IP
         #self.socket_client.connect()
         print('SocketClient')
         self.pubsub = Node(self.socket_client, prefix='UDFJC/emb1/robot0/')
