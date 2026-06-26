@@ -873,7 +873,7 @@ class MainApp:
         self.pubsub = Node(self.socket_client, prefix='UDFJC/emb1/robot0/')
         print('Node')
 
-        DummyLocalPubSubChain(scheduler=self.scheduler, pubsub=self.pubsub, n_chain=300, period_ms=900)
+        DummyLocalPubSubChain(scheduler=self.scheduler, pubsub=self.pubsub, n_chain=1, period_ms=800)
         WatchdogTask(scheduler=self.scheduler, pubsub=self.pubsub, wifi=self.wifi, period_ms=900)
         print('WatchdogTask')
         FollowLineControl(pubsub=self.pubsub)
