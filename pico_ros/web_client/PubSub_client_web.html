@@ -96,7 +96,7 @@
             <h3>Conexión WebSocket</h3>
 
             <label>IP del Broker:</label>
-            <input id="ip" value="192.168.1.100">
+            <input id="ip" value="192.168.1.17">
 
             <label>Puerto:</label>
             <input id="port" value="5052">
@@ -905,6 +905,17 @@
                 console.log("Saved:", filename);
             };
 
+            function recordSample(topic, data) {
+
+                if (!stats_recording) return;
+
+                statisticsLog.push({
+                    topic: topic,
+                    received_ts: performance.now(),
+                    data: structuredClone(data)
+                });
+            };
+
             class JitterRFC {
                 constructor(bus, topic, containerId) {
                     this.bus = bus;
@@ -963,14 +974,13 @@
 
                     let data = (typeof msg === "string") ? JSON.parse(msg) : msg;
 
-                    if (stats_recording) {
-                        statisticsLog.push({
-                            topic: this.topic,
-                            received_ts: performance.now(),
-                            data: structuredClone(data)
-                        });
-                    }
-
+                    // if (stats_recording) {
+                    //     statisticsLog.push({
+                    //         topic: this.topic,
+                    //         received_ts: performance.now(),
+                    //         data: structuredClone(data)
+                    //     });
+                    // }
 
                     this.updateStatsTable(data);
 
@@ -1004,7 +1014,7 @@
 
                     //document.getElementById(`${this.topic}_seq`).innerText = String(msg.sended) + '-' + String(this.received) + '=' + String(msg.sended - this.received);
                     const lost = data.sended - this.received;
-                    console.log('onMessage', lost, data.sended, this.received, this.row)
+                    //console.log('onMessage', lost, data.sended, this.received, this.row)
                     this.networkRow.cells[1].innerText = data.sended; // Sended
                     this.networkRow.cells[2].innerText = lost;       // Lost
 
@@ -1022,6 +1032,11 @@
                         first_ts: first_ts,
                         topic: this.topic   // IMPORTANT for routing
                     }));
+
+                    recordSample(this.topic, {...data,'lost':lost,'received':this.received});
+                    //console.log('onMessage',data)
+
+
                 }
 
                 onSecondTs(msg) {
@@ -1059,6 +1074,8 @@
                     //document.getElementById(`${this.topic}_jit`).innerText = this.jitter.toFixed(5);
                     this.networkRow.cells[3].innerText = rtt.toFixed(3);
                     this.networkRow.cells[4].innerText = this.jitter.toFixed(4);
+                    //console.log('onSecondTs',data)
+                    recordSample(this.topic,  {...data,'latency':rtt,'jitter':this.jitter});
                 }
 
 
