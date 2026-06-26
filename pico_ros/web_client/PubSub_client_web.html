@@ -93,7 +93,7 @@
         <!-- PANEL 1: CONEXIÓN WS -->
         <!-- ========================================================= -->
         <section class="panel" id="panel-connection">
-            <h3>Conexión WebSocket</h3>
+            <h3>WebSocket Connection</h3>
 
             <label>IP del Broker:</label>
             <input id="ip" value="192.168.1.17">
@@ -102,9 +102,9 @@
             <input id="port" value="5052">
 
             <button id="btnConnect">Conectar</button>
-            <button id="btnDisconnect" disabled>Desconectar</button>
+            <button id="btnDisconnect" disabled>Disconnect</button>
 
-            <p id="status">Desconectado</p>
+            <p id="status">Disconnected</p>
         </section>
         <script>
 
@@ -145,7 +145,7 @@
                 // };
 
                 ws.onopen = () => {
-                    statusBox.textContent = "🟢 Conectado";
+                    statusBox.textContent = "🟢 Connected";
                     btnConnect.disabled = true;
                     btnDisconnect.disabled = false;
                     addLog("debug", "WS conectado");
@@ -159,7 +159,7 @@
                 };
 
                 ws.onclose = () => {
-                    statusBox.textContent = "🔴 Desconectado";
+                    statusBox.textContent = "🔴 Disconnected";
                     btnConnect.disabled = false;
                     btnDisconnect.disabled = true;
                     addLog("debug", "WS cerrado");
@@ -194,9 +194,9 @@
         <!-- PANEL 1.5: SUSCRIPCIONES ACTIVAS -->
         <!-- ========================================================= -->
         <section class="panel" id="panel-subs">
-            <h3>Suscripciones del PubSub</h3>
+            <h3>PubSub Subscriptions</h3>
 
-            <button id="btnRefreshSubs">Actualizar</button>
+            <button id="btnRefreshSubs">Update</button>
 
             <ul id="subsList" style="
         list-style: none; 
@@ -297,20 +297,20 @@
         <!-- ========================================================= -->
 
         <section class="panel" id="panel-messages">
-            <h3>Mensajes</h3>
+            <h3>Messages</h3>
 
-            <label>Prefijo base</label>
+            <label>Base prefix</label>
             <input id="basePrefix" value="UDFJC/emb1">
 
-            <label>ID del robot</label>
+            <label>Robot ID</label>
             <input id="robotId" type="number" value="0" min="0" step="1">
 
-            <label>Prefijo completo (solo lectura)</label>
+            <label>Full prefix</label>
             <input id="fullPrefix">
 
             <hr>
 
-            <label>Tópico (sufijo)</label>
+            <label>Topic (suffix)</label>
             <input id="msgTopic" value="stick/state">
 
             <label>Payload JSON</label>
@@ -319,8 +319,8 @@
 }
 </textarea>
 
-            <button id="btnPub">Publicar</button>
-            <button id="btnSub">Suscribir</button>
+            <button id="btnPub">Publish</button>
+            <button id="btnSub">Subscribe</button>
         </section>
 
         <script>
@@ -504,7 +504,7 @@
         <!-- PANEL 4: VISUALIZADOR DE CÁMARA -->
         <!-- ========================================================= -->
         <section class="panel" id="panel-camera">
-            <h3>Cámara (camera/frame)</h3>
+            <h3>Camera (camera/frame)</h3>
 
             <canvas id="cam" width="160" height="120"></canvas>
             <p id="camInfo"></p>
@@ -567,10 +567,10 @@
         <!-- PANEL 5: Gemelo Virtual -->
         <!-- ========================================================= -->
         <section class="panel" id="panel-gemelo">
-            <h3>Gemelo</h3>
+            <h3>Virtual twin</h3>
             <input id="coreoName" value="ymca">
-            <button id="btnSubRobot">Suscribir Robot</button>
-            <button id="btnStartCoreo">Iniciar Coreografía</button>
+            <button id="btnSubRobot">Subscribe Robot</button>
+            <!--button id="btnStartCoreo">Start Choreography</button-->
             <div id="render1" style="width:100%; height:300px;"></div>
             <!--canvas id="canvas-gemelo" width="130" height="130"></canvas-->
             <!--p id="camInfo"></p-->
@@ -608,30 +608,30 @@
             };
 
 
-            document.getElementById("btnStartCoreo").onclick = () => {
+            // document.getElementById("btnStartCoreo").onclick = () => {
 
-                const name = document.getElementById("coreoName").value.trim();
-                const coreo = name === "" ? "ymca" : name;
-                //console.log('paner_twin',coreo)
-                //robot.runSequence(coreo);
+            //     const name = document.getElementById("coreoName").value.trim();
+            //     const coreo = name === "" ? "ymca" : name;
+            //     //console.log('paner_twin',coreo)
+            //     //robot.runSequence(coreo);
 
-                // const msg = {
-                //     action: "PUB",
-                //     topic: camera_prefix+"/RPi/sequence",
-                //     data: {
-                //         "action": "execute_now",
-                //         "name": coreo
-                //         }
-                // };
+            //     // const msg = {
+            //     //     action: "PUB",
+            //     //     topic: camera_prefix+"/RPi/sequence",
+            //     //     data: {
+            //     //         "action": "execute_now",
+            //     //         "name": coreo
+            //     //         }
+            //     // };
 
-                bus.pub_pre("RPi/sequence", {
-                    "action": "execute_now",
-                    "name": coreo
-                });
+            //     bus.pub_pre("RPi/sequence", {
+            //         "action": "execute_now",
+            //         "name": coreo
+            //     });
 
-                // document.getElementById("coreoStatus").textContent =
-                //   `Coreografía enviada: ${coreo}`;
-            };
+            //     // document.getElementById("coreoStatus").textContent =
+            //     //   `Coreografía enviada: ${coreo}`;
+            // };
 
 
 
