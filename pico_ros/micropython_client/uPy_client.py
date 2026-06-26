@@ -500,6 +500,30 @@ class Node:
 #################### TASKS #################
 
 
+class DummyLocalPubSubChain(Task):
+    def __init__(self, scheduler, pubsub, n_chain, period_ms=1000):
+        super().__init__(scheduler, period_ms)
+        self.pubsub = pubsub
+        self.n_chain=n_chain
+        self.name='LocalPubSubChain_'+str(n_chain)
+        self.topic_name="dummy/chain_"
+        for i in range(n_chain):
+            pubsub.subscribe(self.topic_name+str(i),self.handle_dummy_chain )
+
+    def update(self):
+            self.pubsub.publish(
+                self.topic_name+'0',
+                { 'index':0 }
+            )
+            
+    def handle_dummy_chain(self, msg):
+            index=msg['index']+1
+            self.pubsub.publish(
+                self.topic_name+str(index),
+                { 'index':index }
+            )
+             
+
 class WatchdogTask(Task):
     def __init__(self, scheduler, pubsub, wifi, period_ms=1000):
         super().__init__(scheduler, period_ms)
@@ -840,16 +864,17 @@ class MainApp:
 
         self.scheduler = Scheduler()
         print('Scheduler')
-        self.wifi = WiFiManager("Red_UD_LAMIC") # Ejemplo  Change to your WiFi
+        self.wifi = WiFiManager("PEREZ") # Ejemplo  Change to your WiFi
         #self.wifi.connect()
         print('WiFiManager')
-        self.socket_client = SocketClient(host="192.168.1.100", port=5051,scheduler=self.scheduler) #192.168.1.100  # Change to the Broker IP
+        self.socket_client = SocketClient(host="192.168.1.17", port=5051,scheduler=self.scheduler) #192.168.1.100  # Change to the Broker IP
         #self.socket_client.connect()
         print('SocketClient')
         self.pubsub = Node(self.socket_client, prefix='UDFJC/emb1/robot0/')
         print('Node')
 
-        WatchdogTask(scheduler=self.scheduler, pubsub=self.pubsub, wifi=self.wifi)
+        DummyLocalPubSubChain(scheduler=self.scheduler, pubsub=self.pubsub, n_chain=300, period_ms=900)
+        WatchdogTask(scheduler=self.scheduler, pubsub=self.pubsub, wifi=self.wifi, period_ms=900)
         print('WatchdogTask')
         FollowLineControl(pubsub=self.pubsub)
         CameraSimulator(scheduler=self.scheduler, pubsub=self.pubsub, width=40, height=30, period_ms=1000)
