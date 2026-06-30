@@ -1,3 +1,4 @@
+import json
 import random
 import sys
 
@@ -13,9 +14,14 @@ class Node:
         #self.subscribe("node/new_sub",self.handle_new_sub )
         self.node_name  = node_name or prefix+str(random.randint(0,2**32-1))
         self.transports = []
+        self.subscribe("node/get_second_ts",self.handle_get_second_ts )
+        
 
     def add_transport(self, transport):
         self.transports.append(transport)
+        for topic in self.subscriptions:
+            transport.subscribe(topic)
+            
 
     def publish(self, topic, msg):
         ts=util.time_float()
@@ -79,6 +85,19 @@ class Node:
 #                 "ts": util.time_float(),
 #             }
 #        )
+
+    def handle_get_second_ts(self, topic,msg):
+        msg=json.loads(msg)
+        print('WatchdogTask.handle_get_second_ts',type(msg),msg.get("first_ts",None))
+        
+        self.publish(
+            "node/send_second_ts",
+            {
+                "topic": msg.get("topic"), 
+                "first_ts":  msg.get("first_ts"),
+                "second_ts": util.time_float(),
+            }
+        )
 
 
 #     def handle_pub(self, msg):

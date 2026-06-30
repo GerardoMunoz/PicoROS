@@ -14,7 +14,7 @@ class PubSubTCP:
 #         self.subscriptions = {}  # topic -> set(callback)
         #self.subscribe("node/new_sub",self.new_sub )
 #         self.node_name = prefix if node_name==None  else node_name
-        node.subscribe("node/get_second_ts",self.handle_get_second_ts )
+        #node.subscribe("node/get_second_ts",self.handle_get_second_ts )
 
             
     def new_sub(self,msg):
@@ -83,15 +83,15 @@ class PubSubTCP:
     def handle_sub(self,msg):
         print('Node.handle_sub ignored',msg)
 
-    def handle_get_second_ts(self, topic,msg):
-        msg=json.loads(msg)
-        print('WatchdogTask.handle_get_second_ts',type(msg),msg.get("first_ts",None))
-        
-        self.publish(
-            "node/send_second_ts",
-            {
-                "topic": msg.get("topic"), 
-                "first_ts":  msg.get("first_ts"),
-                "second_ts": util.time_float(),
-            }
-        )
+#     def handle_get_second_ts(self, topic,msg):
+#         msg=json.loads(msg)
+#         print('WatchdogTask.handle_get_second_ts',type(msg),msg.get("first_ts",None))
+#         
+#         self.publish(
+#             "node/send_second_ts",
+#             {
+#                 "topic": msg.get("topic"), 
+#                 "first_ts":  msg.get("first_ts"),
+#                 "second_ts": util.time_float(),
+#             }
+#         )
