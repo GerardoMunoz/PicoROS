@@ -1,4 +1,5 @@
 import ubinascii
+import math
 
 import util
 from task import Task

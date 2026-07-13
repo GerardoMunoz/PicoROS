@@ -11,10 +11,6 @@ class PubSubTCP:
         self.noecho_name  = noecho_name or self.__class__.__name__
         self.node=node
         node.add_transport(self)
-#         self.subscriptions = {}  # topic -> set(callback)
-        #self.subscribe("node/new_sub",self.new_sub )
-#         self.node_name = prefix if node_name==None  else node_name
-        #node.subscribe("node/get_second_ts",self.handle_get_second_ts )
 
             
     def new_sub(self,msg):
@@ -24,10 +20,6 @@ class PubSubTCP:
 
     def publish(self, topic, data):
         ts=util.time_float()
-#         self.broker_publish(topic,data,ts=ts)
-#         self.local_publish(topic,data,ts=ts)
-#        
-#     def broker_publish(self,topic,data,ts=None):
         self.sock.ensure()
 
         pkt = {
@@ -40,20 +32,6 @@ class PubSubTCP:
         self.sock.send_json(pkt)
 
 
-#     def local_publish(self,topic,data,ts=None):   
-#         callbacks = self.subscriptions.get(topic, set())
-# 
-#         print(f"[INFO] [{ts}] [PUB {topic}] : {len(callbacks)} callbacks")
-# 
-#         for c in list(callbacks):
-#             #if c != origin:
-#                 try:
-#                     c(data)
-#                 except Exception as e:
-#                     callbacks.remove(c)
-#                     print("Remove from topic",topic,"callback",c,"error",e)
-#                     #traceback.print_exc()
-#                     sys.print_exception(e)
 
 
     def subscribe(self, topic ):#topic without prefix
@@ -83,15 +61,3 @@ class PubSubTCP:
     def handle_sub(self,msg):
         print('Node.handle_sub ignored',msg)
 
-#     def handle_get_second_ts(self, topic,msg):
-#         msg=json.loads(msg)
-#         print('WatchdogTask.handle_get_second_ts',type(msg),msg.get("first_ts",None))
-#         
-#         self.publish(
-#             "node/send_second_ts",
-#             {
-#                 "topic": msg.get("topic"), 
-#                 "first_ts":  msg.get("first_ts"),
-#                 "second_ts": util.time_float(),
-#             }
-#         )
