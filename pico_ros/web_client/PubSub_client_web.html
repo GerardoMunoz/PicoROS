@@ -1,5 +1,11 @@
 <!doctype html>
+
 <html>
+<!-- ejemplos    
+PubSub_client_web.html?transport=picoros&host=192.168.0.101&port=5052&robot=0
+PubSub_client_web.html?transport=mqtt&host=192.168.0.101&port=9001&robot=0
+PubSub_client_web.html?transport=mqtt&host=192.168.0.101&port=9001&prefix=UDFJC/emb1&robot=3
+-->
 
 <head>
     <meta charset="utf-8">
@@ -83,6 +89,7 @@
             resize: vertical;
         }
     </style>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 </head>
 
 
@@ -93,13 +100,16 @@
         <!-- PANEL 1: CONEXIÓN WS -->
         <!-- ========================================================= -->
         <section class="panel" id="panel-connection">
-            <h3>WebSocket Connection</h3>
+            <h3>Connection</h3>
+
+            <label>Transport</label>
+            <input id="transport" readonly>
 
             <label>IP del Broker:</label>
-            <input id="ip" value="192.168.1.17">
+            <input id="ip" value="None">
 
             <label>Puerto:</label>
-            <input id="port" value="5052">
+            <input id="port" value="None">
 
             <button id="btnConnect">Conectar</button>
             <button id="btnDisconnect" disabled>Disconnect</button>
@@ -107,6 +117,195 @@
             <p id="status">Disconnected</p>
         </section>
         <script>
+
+            const params_url = new URLSearchParams(window.location.search);
+
+            const transport = params_url.get("transport") || "picoros";
+            const host = params_url.get("host") || "192.168.0.101";
+            const port = params_url.get("port") || (
+                transport === "mqtt" ? "1883" : "5052"
+            );
+
+            //const robotId = params.get("robot") || "0";
+
+            const ipInput = document.getElementById("ip");
+            const portInput = document.getElementById("port");
+
+            ipInput.value = host;
+            portInput.value = port;
+
+            if (params_url.has("host")) {
+                ipInput.readOnly = true;
+            }
+
+            if (params_url.has("port")) {
+                portInput.readOnly = true;
+            }
+
+            document.getElementById("transport").value = transport;
+
+
+
+            class MQTTWebSocket {
+
+                static CONNECTING = 0;
+                static OPEN = 1;
+                static CLOSING = 2;
+                static CLOSED = 3;
+
+                constructor(url) {
+
+                    this.url = url;
+
+                    this.client = null;
+
+                    this.readyState = MQTTWebSocket.CONNECTING;
+
+                    // WebSocket-like callbacks
+                    this.onopen = null;
+                    this.onclose = null;
+                    this.onmessage = null;
+                    this.onerror = null;
+
+                    // Parse:
+                    // mqtt://192.168.1.10:9001
+                    // ws://192.168.1.10:9001
+                    console.log('mqtt url', url)
+                    this.client = mqtt.connect(url, {
+                        reconnectPeriod: 10000
+                    });
+
+                    //--------------------------------------------------
+                    // CONNECT
+                    //--------------------------------------------------
+
+                    this.client.on("connect", () => {
+
+                        this.readyState = MQTTWebSocket.OPEN;
+
+                        if (this.onopen)
+                            this.onopen();
+
+                    });
+
+                    //--------------------------------------------------
+                    // CLOSE
+                    //--------------------------------------------------
+
+                    this.client.on("close", () => {
+
+                        this.readyState = MQTTWebSocket.CLOSED;
+
+                        if (this.onclose)
+                            this.onclose();
+
+                    });
+
+                    //--------------------------------------------------
+                    // ERROR
+                    //--------------------------------------------------
+
+                    this.client.on("error", (err) => {
+
+                        if (this.onerror)
+                            this.onerror(err);
+
+                    });
+
+                    //--------------------------------------------------
+                    // RECEIVE
+                    //--------------------------------------------------
+
+                    this.client.on("message", (topic, payload) => {
+
+                        let data;
+
+                        try {
+                            data = JSON.parse(payload.toString());
+                        }
+                        catch {
+
+                            data = payload.toString();
+
+                        }
+
+                        const event = {
+
+                            data: JSON.stringify({
+                                action: "PUB",
+                                topic: topic,
+                                data: data
+                            })
+
+                        };
+
+                        if (this.onmessage)
+                            this.onmessage(event);
+
+                    });
+
+                }
+
+                //--------------------------------------------------
+                // Same as WebSocket.send()
+                //--------------------------------------------------
+
+                send(message) {
+
+                    let obj;
+
+                    try {
+                        obj = JSON.parse(message);
+                    }
+                    catch {
+
+                        console.warn("Invalid JSON");
+
+                        return;
+
+                    }
+
+                    switch (obj.action) {
+
+                        case "PUB":
+
+                            this.client.publish(
+                                obj.topic,
+                                JSON.stringify(obj.data)
+                            );
+
+                            break;
+
+                        case "SUB":
+
+                            this.client.subscribe(
+                                obj.topic
+                            );
+
+                            break;
+
+                        default:
+
+                            console.warn(
+                                "Unknown action:",
+                                obj.action
+                            );
+
+                    }
+
+                }
+
+                //--------------------------------------------------
+
+                close() {
+
+                    this.readyState = MQTTWebSocket.CLOSING;
+
+                    this.client.end();
+
+                }
+
+            }
 
             const params = new URLSearchParams(window.location.search);
             const robotId = params.get("robot") || "0"; // default = 0
@@ -131,10 +330,24 @@
                 const ip = document.getElementById("ip").value;
                 const port = document.getElementById("port").value;
 
-                const url = `ws://${ip}:${port}/ws`;
+                const url = `ws://${ip}:${port}`;
                 logBox.textContent += `Intentando conectar a ${url}\n`;
 
-                ws = new WebSocket(url);
+                //ws = new WebSocket(url);
+                const transport = params.get("transport") || "picoros";
+
+                if (transport === "mqtt") {
+                    ws = new MQTTWebSocket(
+                       url
+                    );
+                }
+                else {
+                    ws = new WebSocket(
+                        url+"/ws"
+                    );
+                }
+
+
                 ws.binaryType = "arraybuffer";
 
                 // ws.onopen = () => {
@@ -188,6 +401,7 @@
             btnDisconnect.onclick = () => {
                 if (ws) ws.close();
             };
+
 
         </script>
         <!-- ========================================================= -->
@@ -327,7 +541,8 @@
             /* ============================================================
                FUNCIÓN DE COMPARACIÓN DE TÓPICOS (wildcards estilo MQTT)
                ============================================================ */
-
+            const basePrefix = params_url.get("prefix") || "UDFJC/emb1";
+            document.getElementById("basePrefix").value=basePrefix;
             // Inputs del panel de mensajes
             const basePrefixInput = document.getElementById("basePrefix");
             const robotIdInput = document.getElementById("robotId");
@@ -495,6 +710,15 @@
                     addLog(topic, msg);
                 }
             });
+
+
+            if (
+                params_url.has("transport") &&
+                params_url.has("host") &&
+                params_url.has("port")
+            ) {
+                btnConnect.click();
+            }
 
         </script>
 
@@ -1033,7 +1257,7 @@
                         topic: this.topic   // IMPORTANT for routing
                     }));
 
-                    recordSample(this.topic, {...data,'lost':lost,'received':this.received});
+                    recordSample(this.topic, { ...data, 'lost': lost, 'received': this.received });
                     //console.log('onMessage',data)
 
 
@@ -1075,7 +1299,7 @@
                     this.networkRow.cells[3].innerText = rtt.toFixed(3);
                     this.networkRow.cells[4].innerText = this.jitter.toFixed(4);
                     //console.log('onSecondTs',data)
-                    recordSample(this.topic,  {...data,'latency':rtt,'jitter':this.jitter});
+                    recordSample(this.topic, { ...data, 'latency': rtt, 'jitter': this.jitter });
                 }
 
 
