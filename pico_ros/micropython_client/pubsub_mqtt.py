@@ -63,7 +63,12 @@ class PubSubMQTT(Task):
         local_topic = topic[len(self.prefix):]
 
         try:
-            data = util.from_json(payload.decode())
+            # 1. Decode bytes payload into a string
+            msg_str = payload.decode('utf-8')
+            
+            # 2. Parse the string into a Python dictionary
+            data = json.loads(msg_str)
+            #data = util.from_json(payload.decode())
         except Exception:
             print(f"PubSubMQTT.handle_pub {local_topic} no JSON, len: {len(payload)}")
 
