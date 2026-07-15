@@ -1251,11 +1251,11 @@ PubSub_client_web.html?transport=mqtt&host=192.168.0.101&port=9001&prefix=UDFJC/
                     //this.pending[seq] = first_ts;
 
                     // Request second timestamp from Pico
-                    this.bus.pub_pre("node/get_second_ts", JSON.stringify({
+                    this.bus.pub_pre("node/get_second_ts", {
                         //seq: seq,
                         first_ts: first_ts,
                         topic: this.topic   // IMPORTANT for routing
-                    }));
+                    });
 
                     recordSample(this.topic, { ...data, 'lost': lost, 'received': this.received });
                     //console.log('onMessage',data)
