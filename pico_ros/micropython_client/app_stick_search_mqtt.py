@@ -17,9 +17,12 @@ TCP_host="192.168.0.101"
 TCP_port=5051
 MQTT_broker="192.168.0.101"
 node_name='emb_node_0'
+prefix='UDFJC/iot_ws/robot0/'
 
 with open(password_file) as f:
     password = f.read().strip()
+    
+
 
 
 
@@ -32,9 +35,9 @@ print('WiFiManager')
 #self.socket_client.connect()
 #print('SocketClient')
 #self.pubsub = Node(self.socket_client, prefix='UDFJC/emb1/robot0/')
-node = Node(prefix='UDFJC/emb1/robot0/',node_name=node_name)
+node = Node(prefix=prefix,node_name=node_name)
 PubSubMQTT(client_id=node_name, broker=MQTT_broker,  scheduler=scheduler, node=node, period_ms=100 , 
-         prefix="UDFJC/emb1/robot0/")
+         prefix=prefix)
 print('Node')
 
 DummyLocalPubSubChain(scheduler=scheduler, pubsub=node, n_chain=1, period_ms=800)
