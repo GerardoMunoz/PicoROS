@@ -28,7 +28,7 @@ class Node:
         for t in self.transports:
             t.publish(topic,msg)
 #         self.broker_publish(topic,data,ts=ts)
-#         self.local_publish(topic,data,ts=ts)
+        self.local_publish(topic,msg,ts=ts)
 #        
 #     def broker_publish(self,topic,data,ts=None):
 #         self.sock.ensure()
@@ -43,7 +43,7 @@ class Node:
 #         self.sock.send_json(pkt)
 # 
 # 
-#     def local_publish(self,topic,data,ts=None):   
+    def local_publish(self,topic,msg,ts=None):   
         callbacks = self.subscriptions.get(topic, set())
 
         print(f"[INFO] [{ts}] [PUB {topic}] : {len(callbacks)} callbacks")
@@ -51,10 +51,12 @@ class Node:
         for c in list(callbacks):
             #if c != origin:
                 try:
+                    print('node msg',type(msg))
                     c(topic=topic,msg=msg)
                 except Exception as e:
                     callbacks.remove(c)
-                    print("Remove from topic",topic,"callback",c,"error",e)
+                    print('msg error',msg)
+                    print("Remove from topic",topic,"callback",c,"error")
                     #traceback.print_exc()
                     sys.print_exception(e)
 
@@ -87,7 +89,10 @@ class Node:
 #        )
 
     def handle_get_second_ts(self, topic,msg):
-        msg=json.loads(msg)
+        print('handle_get_second_ts 0',type(msg))
+        #msg=json.loads(msg)
+        #print('handle_get_second_ts 1',type(msg))
+
         print('WatchdogTask.handle_get_second_ts',type(msg),msg.get("first_ts",None))
         
         self.publish(

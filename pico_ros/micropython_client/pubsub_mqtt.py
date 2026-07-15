@@ -74,4 +74,4 @@ class PubSubMQTT(Task):
 
             data = payload
 
-        self.node.publish(local_topic, data)
+        self.node.local_publish(local_topic, data)

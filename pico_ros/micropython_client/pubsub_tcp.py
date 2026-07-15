@@ -56,7 +56,7 @@ class PubSubTCP:
         print('Node.handle_pub', local_topic)
         
 
-        self.node.publish(local_topic, msg['data'])
+        self.node.local_publish(local_topic, msg['data'])
 
     def handle_sub(self,msg):
         print('Node.handle_sub ignored',msg)

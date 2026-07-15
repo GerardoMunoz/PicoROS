@@ -19,7 +19,7 @@ TCP_port=5051
 MQTT_broker="192.168.0.101"
 node_name='emb_node_0'
 prefix='UDFJC/iot_ws/robot0/'
-transport="picoros" # "picoros"
+transport="picoros" # "picoros" or "mqtt"
 
 with open(password_file) as f:
     password = f.read().strip()
