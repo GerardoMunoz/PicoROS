@@ -1055,7 +1055,7 @@ PubSub_client_web.html?transport=mqtt&host=192.168.0.101&port=9001&prefix=UDFJC/
         <!-- PANEL 7: Stats -->
         <!-- ========================================================= -->
         <section class="panel" id="panel-network">
-            <h3>Network Stats (Watchdog)</h3>
+            <h3>Network Stats. (Watchdog)</h3>
             <button id="start_recording">Start Recording</button>
             <button id="stop_recording">Stop & Download</button>
             <p>RSSI: <span id="rssi">-</span> dBm</p>
@@ -1254,7 +1254,8 @@ PubSub_client_web.html?transport=mqtt&host=192.168.0.101&port=9001&prefix=UDFJC/
                     this.bus.pub_pre("node/get_second_ts", {
                         //seq: seq,
                         first_ts: first_ts,
-                        topic: this.topic   // IMPORTANT for routing
+                        topic: this.topic,   // IMPORTANT for routing
+                        sended: data.sended
                     });
 
                     recordSample(this.topic, { ...data, 'lost': lost, 'received': this.received });
