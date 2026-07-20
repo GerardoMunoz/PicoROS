@@ -338,12 +338,12 @@ PubSub_client_web.html?transport=mqtt&host=192.168.0.101&port=9001&prefix=UDFJC/
 
                 if (transport === "mqtt") {
                     ws = new MQTTWebSocket(
-                       url
+                        url
                     );
                 }
                 else {
                     ws = new WebSocket(
-                        url+"/ws"
+                        url + "/ws"
                     );
                 }
 
@@ -542,7 +542,7 @@ PubSub_client_web.html?transport=mqtt&host=192.168.0.101&port=9001&prefix=UDFJC/
                FUNCIÓN DE COMPARACIÓN DE TÓPICOS (wildcards estilo MQTT)
                ============================================================ */
             const basePrefix = params_url.get("prefix") || "UDFJC/emb1";
-            document.getElementById("basePrefix").value=basePrefix;
+            document.getElementById("basePrefix").value = basePrefix;
             // Inputs del panel de mensajes
             const basePrefixInput = document.getElementById("basePrefix");
             const robotIdInput = document.getElementById("robotId");
@@ -1057,7 +1057,7 @@ PubSub_client_web.html?transport=mqtt&host=192.168.0.101&port=9001&prefix=UDFJC/
         <section class="panel" id="panel-network">
             <h3>Network Stats. (Watchdog)</h3>
             <button id="start_recording">Start Recording</button>
-            <button id="stop_recording">Stop & Download</button>
+            <button id="stop_recording" disabled>Stop & Download</button>
             <p>RSSI: <span id="rssi">-</span> dBm</p>
             <p>Mem free: <span id="mem_free_bytes">-</span> Bytes</p>
             <p>Mem used: <span id="mem_used_bytes">-</span> Bytes</p>
@@ -1093,14 +1093,21 @@ PubSub_client_web.html?transport=mqtt&host=192.168.0.101&port=9001&prefix=UDFJC/
             let stats_recording = false;
             let statisticsLog = [];
 
-            document.getElementById("start_recording").onclick = () => {
+            const btn_stats_start_rec = document.getElementById("start_recording");
+            const btn_stats_stop_rec = document.getElementById("stop_recording");
+
+            btn_stats_start_rec.onclick = () => {
                 stats_recording = true;
+                btn_stats_start_rec.disabled = true;
+                btn_stats_stop_rec.disabled = false;
                 statisticsLog = [];
             };
 
-            document.getElementById("stop_recording").onclick = () => {
+            btn_stats_stop_rec.onclick = () => {
 
                 stats_recording = false;
+                btn_stats_start_rec.disabled = false;
+                btn_stats_stop_rec.disabled = true;
 
                 const now = new Date();
 
