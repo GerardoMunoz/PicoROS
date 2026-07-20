@@ -19,7 +19,7 @@ TCP_port=5051
 MQTT_broker="192.168.0.101"
 node_name='emb_node_0'
 prefix='UDFJC/iot_ws/robot0/'
-transport="picoros" # "picoros" or "mqtt"
+transport="mqtt" # "picoros" or "mqtt"
 
 with open(password_file) as f:
     password = f.read().strip()
@@ -34,7 +34,7 @@ wifi = WiFiManager(ssid=ssid,password=password) # Ejemplo  Change to your WiFi
 node = Node(prefix=prefix,node_name=node_name)
 
 if transport=="picoros":
-    socket_client = SocketClient(host=TCP_host, port=TCP_port,scheduler=scheduler) #192.168.1.100  # Change to the Broker IP
+    socket_client = SocketClient(host=TCP_host, port=TCP_port,scheduler=scheduler, period_ms=100) #192.168.1.100  # Change to the Broker IP
     PubSubTCP(node=node,socket_client=socket_client, prefix=prefix, noecho_name="PubSubTCP")
 
 if transport=="mqtt":        
@@ -49,7 +49,7 @@ CameraSimulator(scheduler=scheduler, pubsub=node, width=40, height=30, period_ms
 
 #Arm(scheduler=self.scheduler, pubsub=self.pubsub,joint_state={"shoulder": 10, "elbow": 20, "wrist": 30})
 #print('Arm')
-CarSimulator(scheduler=scheduler, pubsub=node,twist = {"linear": 0.0,"angular": 0.01} )
+CarSimulator(scheduler=scheduler, pubsub=node,twist = {"linear": 0.0,"angular": 0.01} , period_ms=1000)
 print('Initialized')
 
 

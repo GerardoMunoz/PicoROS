@@ -51,7 +51,15 @@ class PubSubMQTT(Task):
 
     def update(self):
         """Call periodically from the main loop."""
-        self.client.check_msg()
+        #self.client.check_msg()
+        n = 0
+        while True:
+            op = self.client.check_msg()
+            if op is None:
+                break
+            n += 1
+        if n:
+            print("MQTT.update processed", n, "MQTT packets")
 
     def handle_pub(self, topic, payload):
 

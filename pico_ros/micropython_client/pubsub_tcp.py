@@ -13,9 +13,9 @@ class PubSubTCP:
         node.add_transport(self)
 
             
-    def new_sub(self,msg):
-        self.sock.ensure()
-        self.sock.send_json(msg)
+#     def new_sub(self,msg):
+#         self.sock.ensure()
+#         self.sock.send_json(msg)
 
 
     def publish(self, topic, data):

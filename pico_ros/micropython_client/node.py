@@ -51,7 +51,7 @@ class Node:
         for c in list(callbacks):
             #if c != origin:
                 try:
-                    print('node msg',type(msg))
+                    #print('node msg',type(msg))
                     c(topic=topic,msg=msg)
                 except Exception as e:
                     callbacks.remove(c)
@@ -89,22 +89,26 @@ class Node:
 #        )
 
     def handle_get_second_ts(self, topic,msg):
-        print('handle_get_second_ts 0',type(msg))
+        #print('handle_get_second_ts 0',type(msg))
         #msg=json.loads(msg)
         #print('handle_get_second_ts 1',type(msg))
 
-        print('WatchdogTask.handle_get_second_ts',type(msg),msg.get("first_ts",None))
-        
+        #print('WatchdogTask.handle_get_second_ts',type(msg),msg.get("first_ts",None))
+        t0 = util.time_float()
+        #print("ENTER", t0)
+       
         self.publish(
             "node/send_second_ts",
             {
                 "topic": msg.get("topic"), 
                 "first_ts":  msg.get("first_ts"),
                 "second_ts": util.time_float(),
+                "sended": msg.get("sended")
             }
         )
 
-
+        t1 = util.time_float()
+        #print("EXIT", t1, "elapsed", str(float(t1) - float(t0)))
 #     def handle_pub(self, msg):
 #         topic = msg['topic']
 # 
