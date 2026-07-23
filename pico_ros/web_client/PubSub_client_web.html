@@ -105,13 +105,13 @@ PubSub_client_web.html?transport=mqtt&host=192.168.0.101&port=9001&prefix=UDFJC/
             <label>Transport</label>
             <input id="transport" readonly>
 
-            <label>IP del Broker:</label>
+            <label>Broker IP:</label>
             <input id="ip" value="None">
 
-            <label>Puerto:</label>
+            <label>Port:</label>
             <input id="port" value="None">
 
-            <button id="btnConnect">Conectar</button>
+            <button id="btnConnect">Connect</button>
             <button id="btnDisconnect" disabled>Disconnect</button>
 
             <p id="status">Disconnected</p>
@@ -331,7 +331,7 @@ PubSub_client_web.html?transport=mqtt&host=192.168.0.101&port=9001&prefix=UDFJC/
                 const port = document.getElementById("port").value;
 
                 const url = `ws://${ip}:${port}`;
-                logBox.textContent += `Intentando conectar a ${url}\n`;
+                logBox.textContent += `Trying to connect to ${url}\n`;
 
                 //ws = new WebSocket(url);
                 const transport = params.get("transport") || "picoros";
@@ -351,7 +351,7 @@ PubSub_client_web.html?transport=mqtt&host=192.168.0.101&port=9001&prefix=UDFJC/
                 ws.binaryType = "arraybuffer";
 
                 // ws.onopen = () => {
-                //   statusBox.textContent = "🟢 Conectado";
+                //   statusBox.textContent = "🟢 Connected";
                 //   btnConnect.disabled = true;
                 //   btnDisconnect.disabled = true;
                 //   addLog("debug", "WS conectado");
