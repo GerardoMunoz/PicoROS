@@ -6,6 +6,7 @@ from pico_ros.pubsub_mqtt import PubSubMQTT
 
 import config_wifi
 import config_mqtt
+import config_gpio
 
 # SSID="Ejemplo" #  Change to your WiFi
 # PSW_FILE=".env" # File name with password
